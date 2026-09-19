@@ -1,0 +1,71 @@
+{
+  "trialsPerTask": 4,
+  "thresholds": {
+    "firstPassValidRate": 0.8,
+    "validWithinOneRepairRate": 0.95,
+    "scenarioAccuracy": 0.8,
+    "p95LatencyMs": 60000,
+    "memoryRoundTripMs": 10000
+  },
+  "models": {
+    "openai/gpt-5.6-luna": {
+      "tier": "fast",
+      "calls": 16,
+      "firstPassValidRate": 1,
+      "validWithinOneRepairRate": 1,
+      "scenarioAccuracy": 1,
+      "byScenario": {
+        "buried date filter → interface change on date-range": 1,
+        "retries on a slow export → performance, no redesign": 1,
+        "remembered undo → does not re-propose the undone mutation": 1
+      },
+      "p50LatencyMs": 4903,
+      "p95LatencyMs": 11642,
+      "meanTokens": 3302,
+      "errors": [],
+      "rejections": []
+    },
+    "openai/gpt-5.6-sol": {
+      "tier": "balanced",
+      "calls": 16,
+      "firstPassValidRate": 1,
+      "validWithinOneRepairRate": 1,
+      "scenarioAccuracy": 1,
+      "byScenario": {
+        "buried date filter → interface change on date-range": 1,
+        "retries on a slow export → performance, no redesign": 1,
+        "remembered undo → does not re-propose the undone mutation": 1
+      },
+      "p50LatencyMs": 7215,
+      "p95LatencyMs": 12471,
+      "meanTokens": 3313,
+      "errors": [],
+      "rejections": []
+    },
+    "anthropic/claude-sonnet-5": {
+      "tier": "deep",
+      "calls": 16,
+      "firstPassValidRate": 0.875,
+      "validWithinOneRepairRate": 1,
+      "scenarioAccuracy": 1,
+      "byScenario": {
+        "buried date filter → interface change on date-range": 1,
+        "retries on a slow export → performance, no redesign": 1,
+        "remembered undo → does not re-propose the undone mutation": 1
+      },
+      "p50LatencyMs": 12536,
+      "p95LatencyMs": 19404,
+      "meanTokens": 6298,
+      "errors": [],
+      "rejections": [
+        "generate: anthropic/claude-sonnet-5: The reply was not valid JSON (Expected property name or '}' in JSON at position 1 (line 1 column 2)).",
+        "generate: anthropic/claude-sonnet-5: components.4.visible: Invalid input: expected boolean, received undefined"
+      ]
+    }
+  },
+  "memory": {
+    "roundTripMs": 1219,
+    "recalled": true
+  },
+  "finishedAt": "2026-09-19T17:32:34.239Z"
+}

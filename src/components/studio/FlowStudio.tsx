@@ -319,7 +319,9 @@ export function FlowStudio({
 
     return (
         <MotionConfig reducedMotion="user">
-            <main className="studio">
+            <main
+                className={`studio ${developerMode ? 'studio--developer' : 'studio--user'}`}
+            >
                 <header className="bar">
                     <div className="bar__brand">
                         <span className="wordmark">flow.js</span>

@@ -20,6 +20,7 @@ describe("computeMetrics", () => {
       sessionsUsed: 3,
       usageRate: 1,
       avgDiscoveryMs: 6500, // interaction_start counts as discovery
+      avgFirstViewMs: 4000, // scrolled into view after load
       valueChangesPerUsingSession: 3,
       views: 3,
     });

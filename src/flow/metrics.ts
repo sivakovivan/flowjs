@@ -32,6 +32,8 @@ export interface ComponentMetrics {
   sessionsUsed: number;
   usageRate: number;
   avgDiscoveryMs: number | null;
+  /** How long after load the component first scrolled into view. */
+  avgFirstViewMs: number | null;
   repeatRate: number;
   valueChangesPerUsingSession: number | null;
   completions: number;
@@ -67,6 +69,7 @@ export interface Metrics {
   latency: LatencyMetrics[];
 }
 
+const average = (values: number[]) => values.reduce((a, b) => a + b, 0) / values.length;
 const round = (value: number, digits = 3) => Math.round(value * 10 ** digits) / 10 ** digits;
 
 function percentile(sorted: number[], p: number): number {
@@ -151,6 +154,14 @@ export function computeMetrics(input: {
     }
     const discoveryTimes = [...discovery.values()];
 
+    const firstView = new Map<string, number>();
+    for (const event of own) {
+      if (event.eventType !== "component_view") continue;
+      const previous = firstView.get(event.sessionId);
+      if (previous === undefined || event.sinceLoadMs < previous) firstView.set(event.sessionId, event.sinceLoadMs);
+    }
+    const firstViewTimes = [...firstView.values()];
+
     let repeats = 0;
     const lastInteraction = new Map<string, number>();
     for (const event of ownInteractions) {
@@ -176,9 +187,8 @@ export function computeMetrics(input: {
       interactionShare: interactions.length ? round(ownInteractions.length / interactions.length) : 0,
       sessionsUsed: usingSessions.size,
       usageRate: totalSessions ? round(usingSessions.size / totalSessions) : 0,
-      avgDiscoveryMs: discoveryTimes.length
-        ? Math.round(discoveryTimes.reduce((a, b) => a + b, 0) / discoveryTimes.length)
-        : null,
+      avgDiscoveryMs: discoveryTimes.length ? Math.round(average(discoveryTimes)) : null,
+      avgFirstViewMs: firstViewTimes.length ? Math.round(average(firstViewTimes)) : null,
       repeatRate: ownInteractions.length ? round(repeats / ownInteractions.length) : 0,
       valueChangesPerUsingSession: usingSessions.size ? round(valueChanges / usingSessions.size, 2) : null,
       completions,

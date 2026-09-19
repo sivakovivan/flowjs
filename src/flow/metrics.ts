@@ -37,6 +37,10 @@ export interface ComponentMetrics {
     primitive: string;
     visible: boolean;
     views: number;
+    hovers: number;
+    scrolls: number;
+    focusStarts: number;
+    disabledAttempts: number;
     interactions: number;
     interactionShare: number;
     sessionsUsed: number;
@@ -245,6 +249,16 @@ export function computeMetrics(input: {
                 visible: component.visible,
                 views: own.filter((e) => e.eventType === 'component_view')
                     .length,
+                hovers: own.filter((e) => e.eventType === 'component_hover')
+                    .length,
+                scrolls: own.filter((e) => e.eventType === 'component_scroll')
+                    .length,
+                focusStarts: own.filter(
+                    (e) => e.eventType === 'component_focus'
+                ).length,
+                disabledAttempts: own.filter(
+                    (e) => e.eventType === 'disabled_interaction'
+                ).length,
                 interactions: ownInteractions.length,
                 interactionShare: interactions.length
                     ? round(ownInteractions.length / interactions.length)

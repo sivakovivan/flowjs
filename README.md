@@ -57,12 +57,14 @@ Every output is parsed with Zod and then validated independently by the runtime 
 
 ## Sentry
 
-- **Tracing:** every capability call (data fetch or action) runs inside a `flow.data` / `flow.action` span. The span carries the capability, component, UI version, session and replay id.
-- **Latency pairing:** the locally measured latency is stored with the span's trace id. Heuristics use it to separate interface friction from backend performance. For example, retries on the slow PDF export are diagnosed as backend performance with no redesign. The evidence panel links trace ids when `NEXT_PUBLIC_SENTRY_ORG` is set.
-- **Session Replay:** records sessions, and the replay id is attached to every telemetry event and capability call.
-- **Logs:** capability successes and failures are logged via `Sentry.logger`.
+- **Browser tracing:** the client traces flow API requests and captures router transitions. The default sample rate is 20%, configurable with `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE`.
+- **Session Replay:** replay is sampled at 10% for normal sessions and 100% for sessions with an error. All text is masked and all media is blocked before it leaves the browser. Configure the normal-session rate with `NEXT_PUBLIC_SENTRY_REPLAY_SESSION_SAMPLE_RATE`.
+- **Capability spans:** every server-side data fetch or action runs inside a `flow.data` / `flow.action` span. Attributes include capability, component, UI version, session, replay id, and measured latency; no request payload is added to the span.
+- **Latency pairing:** the local call record stores the Sentry trace id and replay id. Friction analysis uses those records to distinguish a slow backend from a hard-to-find control, and the evidence panel links traces when `NEXT_PUBLIC_SENTRY_ORG` is set.
+- **Logs and errors:** capability successes and failures use Sentry Logs; unhandled route errors are captured through Next.js request instrumentation. Default PII collection is disabled.
+- **Server credentials:** server instrumentation uses `SENTRY_DSN` only. The public browser DSN is never used to initialize server Sentry.
 
-Sentry is optional: with no DSN the dashboard works unchanged and latency is still measured locally. The full path against a configured Sentry project has **not** been verified yet (no DSN was available while building). Set a DSN, run the demo, and confirm spans and replays arrive.
+Sentry is optional: with no DSN the dashboard works unchanged and latency is still measured locally. To verify a configured project, set both DSNs as appropriate, exercise a data fetch and action, confirm a `flow.data` or `flow.action` trace and its log in Sentry, then confirm a replay id appears in the local evidence data. The application intentionally does not query Sentry's API; it stores trace/replay identifiers locally so the optimization evidence can link back to Sentry.
 
 ## Demo script
 

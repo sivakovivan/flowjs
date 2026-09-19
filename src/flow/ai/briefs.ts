@@ -15,6 +15,7 @@ export interface GenerationBrief {
     dependencies: Array<{ from: string; to: string }>;
     theme: FlowApp['theme'];
     grid: { columns: 12; sizes: typeof SIZE_SPAN };
+    userRequest?: string;
 }
 
 export interface OptimizationBrief extends GenerationBrief {

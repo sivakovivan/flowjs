@@ -15,10 +15,10 @@ import {
     type OptimizationRun,
     type StudioState,
     type VersionRecord,
-} from '@flowjs/core/client/api';
-import { tracker } from '@flowjs/core/client/telemetry';
-import { diffSchemas, type ComponentChange } from '@flowjs/core/flow/schema';
-import { acceptanceThreshold } from '@flowjs/core/flow/scoring';
+} from '@/client/api';
+import { tracker } from '@/client/telemetry';
+import { diffSchemas, type ComponentChange } from '@/flow/schema';
+import { acceptanceThreshold } from '@/flow/scoring';
 import { Dashboard } from '../renderer/Dashboard';
 import { RendererProvider, type Notice } from '../renderer/context';
 import { CapabilitiesPanel } from './CapabilitiesPanel';
@@ -27,6 +27,7 @@ import { GeneratePrompt } from './GeneratePrompt';
 import { HistoryMenu } from './HistoryMenu';
 import { SourceBadge } from './SourceBadge';
 import { TelemetryPanel } from './TelemetryPanel';
+import { CustomizationChat } from './CustomizationChat';
 
 type Tab = 'evidence' | 'telemetry' | 'capabilities';
 
@@ -46,7 +47,11 @@ function themeStyle(theme: StudioState['application']['theme']): CSSProperties {
     } as CSSProperties;
 }
 
-export function FlowStudio() {
+export function FlowStudio({
+    developerMode = false,
+}: {
+    developerMode?: boolean;
+}) {
     const [studio, setStudio] = useState<StudioState | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [generating, setGenerating] = useState(false);
@@ -61,11 +66,13 @@ export function FlowStudio() {
     );
     const [tab, setTab] = useState<Tab>('telemetry');
     const [historyOpen, setHistoryOpen] = useState(false);
+    const [operationsOpen, setOperationsOpen] = useState(false);
     const [showTelemetry, setShowTelemetry] = useState(true);
     const [rate, setRate] = useState(0.5);
     const [busy, setBusy] = useState(false);
     const [notices, setNotices] = useState<Notice[]>([]);
     const noticeId = useRef(0);
+    const userToolsRef = useRef<HTMLDivElement>(null);
 
     const notify = useCallback((tone: Notice['tone'], text: string) => {
         const id = ++noticeId.current;
@@ -75,6 +82,21 @@ export function FlowStudio() {
             4_500
         );
     }, []);
+
+    useEffect(() => {
+        if (developerMode) return;
+        const close = (event: MouseEvent) => {
+            if (
+                userToolsRef.current &&
+                !userToolsRef.current.contains(event.target as Node)
+            ) {
+                setOperationsOpen(false);
+                setHistoryOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', close);
+        return () => document.removeEventListener('mousedown', close);
+    }, [developerMode]);
 
     const refreshState = useCallback(async () => {
         const next = await api.state();
@@ -319,7 +341,7 @@ export function FlowStudio() {
                         </span>
                     </div>
 
-                    {active && (
+                    {active && developerMode && (
                         <div className="bar__versions">
                             <span
                                 className="version-badge"
@@ -358,7 +380,7 @@ export function FlowStudio() {
                         </div>
                     )}
 
-                    {active && (
+                    {active && developerMode && (
                         <div className="bar__controls">
                             <label className="rate">
                                 <span className="rate__ends">
@@ -450,67 +472,148 @@ export function FlowStudio() {
                             </RendererProvider>
                         </section>
 
-                        <aside className="panel" aria-label="flow.js runtime">
-                            <div className="tabs" role="tablist">
-                                {(
-                                    [
-                                        'telemetry',
-                                        'evidence',
-                                        'capabilities',
-                                    ] as const
-                                ).map((name) => (
+                        {developerMode && (
+                            <aside
+                                className="panel"
+                                aria-label="flow.js developer console"
+                            >
+                                <div className="tabs" role="tablist">
+                                    {(
+                                        [
+                                            'telemetry',
+                                            'evidence',
+                                            'capabilities',
+                                        ] as const
+                                    ).map((name) => (
+                                        <button
+                                            key={name}
+                                            type="button"
+                                            role="tab"
+                                            aria-selected={tab === name}
+                                            className={
+                                                tab === name
+                                                    ? 'is-active'
+                                                    : undefined
+                                            }
+                                            onClick={() => setTab(name)}
+                                        >
+                                            {name === 'telemetry'
+                                                ? 'Telemetry'
+                                                : name === 'evidence'
+                                                  ? 'Optimization'
+                                                  : 'Capabilities'}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="panel__body" role="tabpanel">
+                                    {tab === 'telemetry' && (
+                                        <TelemetryPanel
+                                            data={metrics}
+                                            onSeed={seed}
+                                            onClearSeeded={clearSeeded}
+                                            busy={busy}
+                                        />
+                                    )}
+                                    {tab === 'evidence' && (
+                                        <EvidencePanel
+                                            run={run}
+                                            optimizing={optimizing}
+                                            countdown={countdown}
+                                            applying={applying}
+                                            sentryOrg={studio.sentry.org}
+                                            onApply={() =>
+                                                run && apply(run, 'manual')
+                                            }
+                                            onCancelAuto={() =>
+                                                setCountdown(null)
+                                            }
+                                        />
+                                    )}
+                                    {tab === 'capabilities' && (
+                                        <CapabilitiesPanel studio={studio} />
+                                    )}
+                                </div>
+                                <p className="panel__foot">
+                                    {studio.sentry.enabled
+                                        ? 'Sentry tracing and replay are on.'
+                                        : 'Sentry is off (no DSN); latency is still measured locally.'}
+                                </p>
+                            </aside>
+                        )}
+                    </div>
+                )}
+
+                {active && !developerMode && (
+                    <div className="user-tools" ref={userToolsRef}>
+                        <CustomizationChat
+                            generating={generating}
+                            onCustomize={async (prompt) => {
+                                setGenerating(true);
+                                try {
+                                    await api.generate(prompt);
+                                    await refreshState();
+                                    notify(
+                                        'ok',
+                                        'Your request created a new dashboard version.'
+                                    );
+                                } catch (error) {
+                                    notify(
+                                        'error',
+                                        error instanceof Error
+                                            ? error.message
+                                            : 'Could not customize the dashboard.'
+                                    );
+                                } finally {
+                                    setGenerating(false);
+                                }
+                            }}
+                        />
+                        <div className="history-anchor">
+                            <button
+                                type="button"
+                                className="operations-button"
+                                aria-expanded={operationsOpen}
+                                onClick={() =>
+                                    setOperationsOpen((open) => !open)
+                                }
+                            >
+                                Operations
+                            </button>
+                            {operationsOpen && (
+                                <div
+                                    className="operations-menu"
+                                    role="menu"
+                                    aria-label="Dashboard operations"
+                                >
                                     <button
-                                        key={name}
                                         type="button"
-                                        role="tab"
-                                        aria-selected={tab === name}
-                                        className={
-                                            tab === name
-                                                ? 'is-active'
-                                                : undefined
-                                        }
-                                        onClick={() => setTab(name)}
+                                        role="menuitem"
+                                        onClick={undo}
+                                        disabled={!active.parentVersionId}
                                     >
-                                        {name === 'telemetry'
-                                            ? 'Telemetry'
-                                            : name === 'evidence'
-                                              ? 'Optimization'
-                                              : 'Capabilities'}
+                                        ↶ Undo
                                     </button>
-                                ))}
-                            </div>
-                            <div className="panel__body" role="tabpanel">
-                                {tab === 'telemetry' && (
-                                    <TelemetryPanel
-                                        data={metrics}
-                                        onSeed={seed}
-                                        onClearSeeded={clearSeeded}
-                                        busy={busy}
-                                    />
-                                )}
-                                {tab === 'evidence' && (
-                                    <EvidencePanel
-                                        run={run}
-                                        optimizing={optimizing}
-                                        countdown={countdown}
-                                        applying={applying}
-                                        sentryOrg={studio.sentry.org}
-                                        onApply={() =>
-                                            run && apply(run, 'manual')
-                                        }
-                                        onCancelAuto={() => setCountdown(null)}
-                                    />
-                                )}
-                                {tab === 'capabilities' && (
-                                    <CapabilitiesPanel studio={studio} />
-                                )}
-                            </div>
-                            <p className="panel__foot">
-                                {studio.sentry.enabled
-                                    ? 'Sentry tracing and replay are on.'
-                                    : 'Sentry is off (no DSN); latency is still measured locally.'}
-                            </p>
-                        </aside>
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => {
+                                            setOperationsOpen(false);
+                                            setHistoryOpen(true);
+                                        }}
+                                    >
+                                        Version history
+                                    </button>
+                                </div>
+                            )}
+                            {historyOpen && (
+                                <HistoryMenu
+                                    versions={studio.versions}
+                                    activeId={active.id}
+                                    onRestore={restore}
+                                    onClose={() => setHistoryOpen(false)}
+                                />
+                            )}
+                        </div>
                     </div>
                 )}
 

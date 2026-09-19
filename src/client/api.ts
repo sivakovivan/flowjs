@@ -73,10 +73,11 @@ async function request<T>(
 
 export const api = {
     state: () => request<StudioState>('GET', '/state'),
-    generate: () =>
+    generate: (userRequest?: string) =>
         request<{ version: VersionRecord; provenance: AIProvenance | null }>(
             'POST',
-            '/generate'
+            '/generate',
+            userRequest ? { userRequest } : undefined
         ),
     metrics: () => request<MetricsResponse>('GET', '/metrics'),
     optimize: () => request<OptimizationRun>('POST', '/optimize'),

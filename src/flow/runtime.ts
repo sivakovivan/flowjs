@@ -222,6 +222,66 @@ export function createRuntime(deps: {
             return { version, provenance };
         },
 
+        async customize(
+            userRequest: string
+        ): Promise<{ version: VersionRecord; provenance: AIProvenance }> {
+            const request = userRequest.trim();
+            if (!request)
+                throw new RuntimeError('A customization request is required.');
+            if (request.length > 500)
+                throw new RuntimeError(
+                    'Customization requests must be 500 characters or fewer.'
+                );
+            const previous = activeVersion();
+            const { value, provenance } = await withFallback<{
+                schema: UISchema;
+                reasoning: string;
+            }>(
+                (provider) =>
+                    provider.generateSchema({
+                        ...generationBrief(app),
+                        userRequest: request,
+                    }),
+                (output) => {
+                    const parsed = GeneratedSchemaOutput.safeParse(output);
+                    if (!parsed.success)
+                        return {
+                            ok: false,
+                            errors: parsed.error.issues.map((i) => i.message),
+                        };
+                    const validated = validateSchema(
+                        toUISchema(parsed.data),
+                        app
+                    );
+                    return validated.ok
+                        ? {
+                              ok: true,
+                              value: {
+                                  schema: validated.schema,
+                                  reasoning: parsed.data.reasoning,
+                              },
+                          }
+                        : validated;
+                }
+            );
+            const version = store.createVersion({
+                applicationId: app.id,
+                parentVersionId: previous.id,
+                schema: value.schema,
+                mutations: [],
+                reason: `User request: ${request}`,
+                evidence: {
+                    reasoning: value.reasoning,
+                    request,
+                    ai: provenance,
+                },
+                source: 'generated',
+                aiSource: provenance.source,
+                cause: 'generate',
+            });
+            return { version, provenance };
+        },
+
         analyze,
 
         /** Ask OpenAI for a finding and proposal, validate and score it. Never changes the UI. */

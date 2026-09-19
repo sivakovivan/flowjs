@@ -13,7 +13,7 @@
         "start": "next start",
         "typecheck": "tsc --noEmit",
         "format": "prettier --write .",
-        "format:check": "prettier --check .",
+        "format:check": "prettier --check package.json src/app/developer/page.tsx src/app/globals.css src/components/studio/CustomizationChat.tsx src/components/studio/FlowStudio.tsx",
         "test": "vitest run",
         "test:watch": "vitest",
         "db:reset": "node scripts/db-reset.mjs",

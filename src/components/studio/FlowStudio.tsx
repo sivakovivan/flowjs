@@ -70,6 +70,7 @@ export function FlowStudio({
     const [busy, setBusy] = useState(false);
     const [notices, setNotices] = useState<Notice[]>([]);
     const noticeId = useRef(0);
+    const autoOptimizedVersion = useRef<string | null>(null);
     const userToolsRef = useRef<HTMLDivElement>(null);
 
     const notify = useCallback((tone: Notice['tone'], text: string) => {
@@ -188,6 +189,7 @@ export function FlowStudio({
     );
 
     async function optimize() {
+        if (activeId) autoOptimizedVersion.current = activeId;
         tracker.flush();
         setOptimizing(true);
         setTab('evidence');
@@ -205,6 +207,24 @@ export function FlowStudio({
             setOptimizing(false);
         }
     }
+
+    // Once a version has meaningful interaction data, automatically ask for
+    // one optimization proposal. A version is guarded so refreshes and
+    // telemetry polling cannot enqueue duplicate runs.
+    useEffect(() => {
+        if (
+            !activeId ||
+            !metrics ||
+            metrics.versionId !== activeId ||
+            metrics.metrics.totalInteractions === 0 ||
+            autoOptimizedVersion.current === activeId
+        )
+            return;
+        optimize();
+        // optimize intentionally runs once per active version; the ref above
+        // is the stable guard while the function is recreated by React.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeId, metrics]);
 
     // Automatic application waits a moment so the evidence is visible first.
     useEffect(() => {

@@ -25,7 +25,14 @@ export const aiMode = () => ({
 });
 
 export function getRuntime(): FlowRuntime {
-    if (!globalForFlow.flowRuntime) {
+    // Next dev can preserve globalThis across hot reloads. Recreate an older
+    // cached runtime so newly added runtime operations are available.
+    if (
+        !globalForFlow.flowRuntime ||
+        typeof (
+            globalForFlow.flowRuntime as FlowRuntime & { customize?: unknown }
+        ).customize !== 'function'
+    ) {
         const store = new FlowStore(
             process.env.FLOW_DB_PATH || '.flow/flow.db'
         );

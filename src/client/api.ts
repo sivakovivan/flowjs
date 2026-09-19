@@ -33,7 +33,7 @@ export interface StudioState {
     defaultState: StateValues;
     active: VersionRecord | null;
     /** Scaffold for aggregate and per-user layout tracks. */
-    layouts: LayoutTracks;
+    layouts?: LayoutTracks;
     versions: VersionSummary[];
     ai: {
         liveConfigured: boolean;

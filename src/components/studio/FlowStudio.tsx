@@ -28,6 +28,7 @@ import { SourceBadge } from './SourceBadge';
 import { TelemetryPanel } from './TelemetryPanel';
 import { CustomizationChat } from './CustomizationChat';
 import type { LayoutTrack } from '@flowjs/core/flow/layout-tracks';
+import { defaultLayoutTracks } from '@flowjs/core/flow/layout-tracks';
 
 type Tab = 'evidence' | 'telemetry' | 'capabilities';
 
@@ -100,10 +101,13 @@ export function FlowStudio({
 
     const refreshState = useCallback(async () => {
         const next = await api.state();
-        setStudio(next);
-        setLayoutTrack(next.layouts.selected);
-        setRate(next.application.mutationRate);
-        return next;
+        // Keep clients compatible with an older API process during rolling deploys.
+        const layouts = next.layouts ?? defaultLayoutTracks(next.active);
+        const normalized = { ...next, layouts };
+        setStudio(normalized);
+        setLayoutTrack(layouts.selected);
+        setRate(normalized.application.mutationRate);
+        return normalized;
     }, []);
 
     const refreshMetrics = useCallback(async () => {
@@ -121,8 +125,8 @@ export function FlowStudio({
     const activeId = studio?.active?.id ?? null;
     const displayedVersion =
         layoutTrack === 'personal'
-            ? (studio?.layouts.personal ?? studio?.layouts.average)
-            : studio?.layouts.average;
+            ? (studio?.layouts?.personal ?? studio?.layouts?.average)
+            : studio?.layouts?.average;
     useEffect(() => {
         if (!activeId) return;
         refreshMetrics();

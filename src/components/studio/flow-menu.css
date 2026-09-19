@@ -9,13 +9,12 @@
     font-size: 14px;
     letter-spacing: -0.015em;
     --glass-body: #f2f2f7;
-    --glass-tint: #ffffff12;
     --glass-input: #ffffff80;
 }
 .flow-glass {
     background:
         linear-gradient(155deg, #ffffff38, #ffffff00 35% 70%, #ffffff18),
-        var(--glass-tint);
+        transparent;
     border: 1px solid #ffffffa6;
     box-shadow:
         inset 0 1px 1px #ffffffed,
@@ -236,36 +235,6 @@
     }
     to {
         opacity: 1;
-    }
-}
-@media (prefers-color-scheme: dark) {
-    .flow-menu {
-        color: #f0f5ff;
-        --glass-body: #242426;
-        --glass-tint: #00000018;
-        --glass-input: #ffffff0d;
-    }
-    .flow-glass {
-        background:
-            linear-gradient(140deg, #ffffff14, #ffffff00 65%), var(--glass-tint);
-        border-color: #ffffff30;
-    }
-    .flow-menu__launcher {
-        color: #68adff;
-    }
-    .flow-menu__actions button svg {
-        background: #ffffff0d;
-        box-shadow: inset 0 1px #ffffff1a;
-        color: #68adff;
-    }
-    .flow-menu__actions button:nth-child(3) svg {
-        color: #c493f1;
-    }
-    .flow-menu__actions button:nth-child(4) svg {
-        color: #5dd9cf;
-    }
-    .flow-menu__panel button:disabled {
-        color: #99a6bb;
     }
 }
 @media (prefers-reduced-transparency: reduce) {

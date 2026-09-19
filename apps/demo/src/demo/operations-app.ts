@@ -1,4 +1,4 @@
-import { createFlowApp } from '@/flow/registry';
+import { createFlowApp } from '@flowjs/core/flow/registry';
 
 const incidents = [
     {

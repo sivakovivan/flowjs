@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { parseDataOutput } from '@/flow/data-contracts';
-import { GeneratedSchemaOutput, toUISchema } from '@/flow/ai/contracts';
-import { validateSchema } from '@/flow/schema';
+import { parseDataOutput } from '@flowjs/core/flow/data-contracts';
+import {
+    GeneratedSchemaOutput,
+    toUISchema,
+} from '@flowjs/core/flow/ai/contracts';
+import { validateSchema } from '@flowjs/core/flow/schema';
 import { operationsApp } from './operations-app';
 
 describe('foreign operations dashboard registry', () => {

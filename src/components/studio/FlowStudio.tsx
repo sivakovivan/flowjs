@@ -14,10 +14,10 @@ import {
     type OptimizationRun,
     type StudioState,
     type VersionRecord,
-} from '@/client/api';
-import { tracker } from '@/client/telemetry';
-import { diffSchemas, type ComponentChange } from '@/flow/schema';
-import { acceptanceThreshold } from '@/flow/scoring';
+} from '@flowjs/core/client/api';
+import { tracker } from '@flowjs/core/client/telemetry';
+import { diffSchemas, type ComponentChange } from '@flowjs/core/flow/schema';
+import { acceptanceThreshold } from '@flowjs/core/flow/scoring';
 import { Dashboard } from '../renderer/Dashboard';
 import { RendererProvider, type Notice } from '../renderer/context';
 import { CapabilitiesPanel } from './CapabilitiesPanel';

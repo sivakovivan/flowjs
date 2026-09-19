@@ -157,10 +157,10 @@ describe('generate', () => {
         expect(provenance?.source).toBe('recorded');
     });
 
-    it('uses recordings without an API key or when recorded mode is forced', async () => {
-        expect(
-            (await runtime(null).generate()).provenance?.fallbackReason
-        ).toMatch(/OPENAI_API_KEY/);
+    it('requires an API key unless recorded mode is explicitly forced', async () => {
+        await expect(runtime(null).generate()).rejects.toThrow(
+            /OPENAI_API_KEY is required/
+        );
         store = new FlowStore(':memory:');
         let liveCalled = false;
         const live = stub({

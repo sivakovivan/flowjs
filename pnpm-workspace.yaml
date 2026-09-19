@@ -3,3 +3,5 @@ allowBuilds:
     '@sentry/cli': false
 minimumReleaseAgeExclude:
     - openai@7.19.0
+packages:
+    - apps/*

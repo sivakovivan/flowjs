@@ -1,6 +1,6 @@
 'use client';
 
-import type { StudioState } from '@/client/api';
+import type { StudioState } from '@flowjs/core/client/api';
 
 /** Stage 1: show what the developer wrote, which contains no layout, then generate v1. */
 export function GeneratePrompt(props: {
@@ -46,7 +46,7 @@ export function GeneratePrompt(props: {
             </div>
             {studio.registration && (
                 <figure className="generate__code">
-                    <figcaption>src/demo/sales-app.ts</figcaption>
+                    <figcaption>apps/demo/src/demo/sales-app.ts</figcaption>
                     <pre>
                         <code>
                             {studio.registration.slice(

@@ -10,9 +10,9 @@ import {
     useState,
     type ReactNode,
 } from 'react';
-import { api, type ClientCapability } from '@/client/api';
-import { replayId, tracker } from '@/client/telemetry';
-import type { StateValues } from '@/flow/registry';
+import { api, type ClientCapability } from '@flowjs/core/client/api';
+import { replayId, tracker } from '@flowjs/core/client/telemetry';
+import type { StateValues } from '@flowjs/core/flow/registry';
 
 /*
  * Shared runtime state for generated components: application state values,

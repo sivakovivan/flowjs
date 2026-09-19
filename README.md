@@ -6,13 +6,15 @@ An adaptive interface runtime. Developers register what their application can do
 
 This repository is the hackathon MVP: one local Next.js app with a fictional sales analytics demo.
 
+The pnpm workspace has two packages: the repository root is `@flowjs/core`, which owns the runtime, API client, renderer, studio components, and capability execution; `apps/demo` is `@flowjs/demo`, which owns the Next.js entry points, sales registration and data, recorded responses, and demo tests. The demo imports core through the workspace package exports.
+
 ## Quick start
 
 Requires Node 24 or later (for the built-in `node:sqlite`) and pnpm. If pnpm is not installed, prefix each command with `npx pnpm@12` instead.
 
 ```bash
 pnpm install
-cp .env.example .env.local   # optional: add OpenAI and Sentry credentials
+cp apps/demo/.env.example apps/demo/.env.local   # optional: add OpenAI and Sentry credentials
 pnpm dev                     # http://localhost:3000
 ```
 
@@ -29,7 +31,7 @@ Without any credentials the app still runs end to end. It replays recorded AI re
 | `SENTRY_DSN`                                        | Server Sentry: capability spans and Logs. Falls back to `NEXT_PUBLIC_SENTRY_DSN`.                                                                                                                            |
 | `NEXT_PUBLIC_SENTRY_ORG`                            | Optional. Turns trace ids in the evidence panel into links to your Sentry org.                                                                                                                               |
 | `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN` | Optional. Source-map upload at build time.                                                                                                                                                                   |
-| `FLOW_DB_PATH`                                      | SQLite file. Default `.flow/flow.db`.                                                                                                                                                                        |
+| `FLOW_DB_PATH`                                      | SQLite file. Default `apps/demo/.flow/flow.db` when started from the workspace root.                                                                                                                         |
 
 ## Database
 
@@ -53,7 +55,7 @@ Every output is parsed with Zod and then validated independently by the runtime 
 - **Generation:** if a live output is invalid or the call fails, flow.js replays the recorded response instead. An invalid schema is never persisted.
 - **Optimization:** if a live proposal is well formed but unsafe, it is shown as rejected together with the reasons, and nothing changes.
 
-**Recorded responses** live in `src/demo/recordings.ts`. They were hand-authored to the same output contracts and are validated against the demo registry by `src/demo/demo.test.ts`; they were not captured from a live call. The UI labels them as recorded and shows the fallback reason. With an API key configured, verify the live path before relying on it in a demo.
+**Recorded responses** live in `apps/demo/src/demo/recordings.ts`. They were hand-authored to the same output contracts and are validated against the demo registry by `apps/demo/src/demo/demo.test.ts`; they were not captured from a live call. The UI labels them as recorded and shows the fallback reason. With an API key configured, verify the live path before relying on it in a demo.
 
 ## Sentry
 
@@ -66,7 +68,7 @@ Sentry is optional: with no DSN the dashboard works unchanged and latency is sti
 
 ## Demo script
 
-1. **Developer setup:** the start screen shows `src/demo/sales-app.ts`. It lists capabilities, context and theme, and no layout.
+1. **Developer setup:** the start screen shows `apps/demo/src/demo/sales-app.ts`. It lists capabilities, context and theme, and no layout.
 2. **Generation:** choose **Generate dashboard** to create v1. The date filter lands below the fold as a dropdown, a plausible inefficiency.
 3. **Use:** change the date range a few times and click the revenue chart after each change. Export a CSV. Select a transaction and refund it.
 4. **Telemetry:** the Telemetry tab and the chips on each component show usage, discovery time, repeats, sequences and backend latency. **Add 6 seeded sessions** adds synthetic sessions, counted separately and labelled "seeded" everywhere.
@@ -92,9 +94,10 @@ src/flow/            the runtime (framework-agnostic, fully unit tested)
   store.ts           node:sqlite persistence with immutable versions
   runtime.ts         generate → analyze → propose → validate → score → apply / undo
   ai/                OpenAI contracts, briefs, live and recorded providers
-src/demo/            the developer's code: sales capabilities, fictional data, recordings
-src/server/          runtime singleton, Sentry-instrumented capability execution
-src/app/api/flow/    route handlers
+apps/demo/src/demo/   the developer's code: sales capabilities, fictional data, recordings
+apps/demo/src/server/ runtime composition and thin capability adapter
+apps/demo/src/app/api/flow/ route handlers
+src/server/          reusable capability execution and API error handling
 src/components/      schema-driven renderer (Motion layout animations) and runtime chrome
 src/client/          API client and semantic telemetry tracker
 ```
@@ -102,10 +105,12 @@ src/client/          API client and semantic telemetry tracker
 ## Testing
 
 ```bash
-pnpm test        # unit tests: registry, schema, mutations, scoring, store, metrics,
-                 # heuristics, runtime (AI failure and fallback), demo recordings
+pnpm test        # core unit tests: registry, schema, mutations, scoring, store, metrics,
+                 # heuristics, runtime (AI failure and fallback)
+pnpm --dir apps/demo test # demo integration tests
 pnpm test:e2e    # Playwright in local Chrome: the full demo loop in recorded mode
 pnpm typecheck
+pnpm --dir apps/demo typecheck
 pnpm build
 ```
 

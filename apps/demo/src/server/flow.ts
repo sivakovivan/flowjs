@@ -1,15 +1,13 @@
 import * as Sentry from '@sentry/nextjs';
-import { NextResponse } from 'next/server';
-import { ZodError } from 'zod';
 import { salesRecording } from '@/demo/recordings';
 import { salesApp } from '@/demo/sales-app';
 import {
     createOpenAIProvider,
     createRecordedProvider,
-} from '@/flow/ai/providers';
-import { CapabilityInputError } from '@/flow/registry';
-import { createRuntime, RuntimeError, type FlowRuntime } from '@/flow/runtime';
-import { FlowStore } from '@/flow/store';
+} from '@flowjs/core/flow/ai/providers';
+import { createRuntime, type FlowRuntime } from '@flowjs/core/flow/runtime';
+import { FlowStore } from '@flowjs/core/flow/store';
+export { handle } from '@flowjs/core/server/http';
 
 /*
  * One runtime per server process. The demo has a single global dashboard
@@ -48,36 +46,4 @@ export function getRuntime(): FlowRuntime {
 
 export function sentryEnabled(): boolean {
     return Sentry.isEnabled();
-}
-
-/** Uniform JSON errors for route handlers. */
-export async function handle(
-    fn: () => Promise<unknown> | unknown
-): Promise<NextResponse> {
-    try {
-        return NextResponse.json(await fn());
-    } catch (error) {
-        if (error instanceof RuntimeError)
-            return NextResponse.json(
-                { error: error.message },
-                { status: error.status }
-            );
-        if (error instanceof CapabilityInputError)
-            return NextResponse.json({ error: error.message }, { status: 400 });
-        if (error instanceof ZodError) {
-            return NextResponse.json(
-                { error: 'Invalid request.', issues: error.issues },
-                { status: 400 }
-            );
-        }
-        Sentry.captureException(error);
-        console.error(error);
-        return NextResponse.json(
-            {
-                error:
-                    error instanceof Error ? error.message : 'Internal error',
-            },
-            { status: 500 }
-        );
-    }
 }

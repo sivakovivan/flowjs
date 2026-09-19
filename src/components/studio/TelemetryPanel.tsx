@@ -1,7 +1,7 @@
 'use client';
 
-import type { MetricsResponse } from '@/client/api';
-import { describeLatency } from '@/flow/friction';
+import type { MetricsResponse } from '@flowjs/core/client/api';
+import { describeLatency } from '@flowjs/core/flow/friction';
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 const secs = (ms: number | null) =>

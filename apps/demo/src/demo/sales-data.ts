@@ -1,4 +1,4 @@
-import type { CollectionData, TimeseriesData } from '@/flow/data-contracts';
+import type { CollectionData, TimeseriesData } from '@flowjs/core/flow/data-contracts';
 
 /*
  * Fictional sales backend for the demo. Deterministic data, simulated network

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { toUISchema } from './ai/contracts';
+import { toUISchema } from '@flowjs/core/flow/ai/contracts';
 import { salesRecording } from '@/demo/recordings';
 import { salesApp } from '@/demo/sales-app';
-import { findFriction } from './friction';
-import { computeMetrics } from './metrics';
-import { seedSessions } from './seed';
+import { findFriction } from '@flowjs/core/flow/friction';
+import { computeMetrics } from '@flowjs/core/flow/metrics';
+import { seedSessions } from '@flowjs/core/flow/seed';
 
 describe('seedSessions', () => {
     const schema = toUISchema(salesRecording.generation);

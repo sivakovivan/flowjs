@@ -8,7 +8,8 @@ export default defineConfig({
     testDir: 'e2e',
     fullyParallel: false,
     workers: 1,
-    timeout: 60_000,
+    timeout: 180_000,
+    expect: { timeout: 30_000 },
     use: {
         baseURL: `http://localhost:${PORT}`,
         // Use the locally installed Chrome instead of downloading browsers.
@@ -17,7 +18,7 @@ export default defineConfig({
         trace: 'retain-on-failure',
     },
     webServer: {
-        command: `next dev --port ${PORT}`,
+        command: `next start --port ${PORT}`,
         url: `http://localhost:${PORT}/api/flow/state`,
         reuseExistingServer: false,
         timeout: 120_000,

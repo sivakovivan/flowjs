@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { ClientCapability } from '@/client/api';
-import { tracker } from '@/client/telemetry';
-import type { UIComponent } from '@/flow/schema';
+import type { ClientCapability } from '@flowjs/core/client/api';
+import { tracker } from '@flowjs/core/client/telemetry';
+import type { UIComponent } from '@flowjs/core/flow/schema';
 import { useRenderer } from '../context';
 
 type StateCapability = Extract<ClientCapability, { kind: 'state' }>;

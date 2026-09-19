@@ -1,13 +1,13 @@
-import type { OptimizationAnalysis, AIProvenance } from '@/flow/runtime';
-import type { Finding } from '@/flow/friction';
-import type { Metrics } from '@/flow/metrics';
-import type { Primitive } from '@/flow/primitives';
-import type { CapabilityDescriptor, StateValues } from '@/flow/registry';
+import type { OptimizationAnalysis, AIProvenance } from '@flowjs/core/flow/runtime';
+import type { Finding } from '@flowjs/core/flow/friction';
+import type { Metrics } from '@flowjs/core/flow/metrics';
+import type { Primitive } from '@flowjs/core/flow/primitives';
+import type { CapabilityDescriptor, StateValues } from '@flowjs/core/flow/registry';
 import type {
     ApplicationRecord,
     OptimizationRun,
     VersionRecord,
-} from '@/flow/store';
+} from '@flowjs/core/flow/store';
 
 /* Typed client for the flow.js route handlers. */
 

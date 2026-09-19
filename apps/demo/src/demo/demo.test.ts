@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { optimizationBrief } from '@/flow/ai/briefs';
+import { optimizationBrief } from '@flowjs/core/flow/ai/briefs';
 import {
     GeneratedSchemaOutput,
     OptimizationOutput,
     toMutation,
     toUISchema,
-} from '@/flow/ai/contracts';
-import { createRecordedProvider } from '@/flow/ai/providers';
-import type { Finding } from '@/flow/friction';
-import { computeMetrics } from '@/flow/metrics';
-import { parseDataOutput } from '@/flow/data-contracts';
-import { applyMutations } from '@/flow/mutations';
-import { layoutRows, validateSchema, type UISchema } from '@/flow/schema';
+} from '@flowjs/core/flow/ai/contracts';
+import { createRecordedProvider } from '@flowjs/core/flow/ai/providers';
+import type { Finding } from '@flowjs/core/flow/friction';
+import { computeMetrics } from '@flowjs/core/flow/metrics';
+import { parseDataOutput } from '@flowjs/core/flow/data-contracts';
+import { applyMutations } from '@flowjs/core/flow/mutations';
+import { layoutRows, validateSchema, type UISchema } from '@flowjs/core/flow/schema';
 import { salesRecording } from './recordings';
 import { salesApp } from './sales-app';
 

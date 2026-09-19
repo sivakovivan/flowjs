@@ -19,7 +19,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
     return (
-        <html lang="en" className={`${inter.variable} ${plex.variable}`}>
+        <html lang="en" className={`${inter.variable} ${plex.variable}`} suppressHydrationWarning>
             <body>{children}</body>
         </html>
     );

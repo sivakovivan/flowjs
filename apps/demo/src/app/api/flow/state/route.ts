@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { compatiblePrimitives } from '@/flow/primitives';
+import { compatiblePrimitives } from '@flowjs/core/flow/primitives';
 import { aiMode, getRuntime, handle, sentryEnabled } from '@/server/flow';
 
 /** Everything the client needs to render: capabilities, active version, history. */

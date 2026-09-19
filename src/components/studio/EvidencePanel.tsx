@@ -1,7 +1,7 @@
 'use client';
 
-import type { OptimizationAnalysis, OptimizationRun } from '@/client/api';
-import type { Mutation } from '@/flow/mutations';
+import type { OptimizationAnalysis, OptimizationRun } from '@flowjs/core/client/api';
+import type { Mutation } from '@flowjs/core/flow/mutations';
 import { SourceBadge } from './SourceBadge';
 
 function describeMutation(mutation: Mutation): string {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import type { VersionSummary } from '@/client/api';
+import type { VersionSummary } from '@flowjs/core/client/api';
 
 const time = new Intl.DateTimeFormat('en-US', {
     hour: 'numeric',

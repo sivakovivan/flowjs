@@ -2,11 +2,11 @@
 
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import { useEffect, useRef } from 'react';
-import type { ClientCapability } from '@/client/api';
-import { tracker } from '@/client/telemetry';
-import type { ComponentMetrics } from '@/flow/metrics';
-import { SIZE_SPAN } from '@/flow/primitives';
-import type { ComponentChange, UIComponent, UISchema } from '@/flow/schema';
+import type { ClientCapability } from '@flowjs/core/client/api';
+import { tracker } from '@flowjs/core/client/telemetry';
+import type { ComponentMetrics } from '@flowjs/core/flow/metrics';
+import { SIZE_SPAN } from '@flowjs/core/flow/primitives';
+import type { ComponentChange, UIComponent, UISchema } from '@flowjs/core/flow/schema';
 import { useRenderer } from './context';
 import { Primitive } from './primitives';
 

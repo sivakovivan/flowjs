@@ -1,4 +1,4 @@
-import type { Recording } from '@/flow/ai/providers';
+import type { Recording } from '@flowjs/core/flow/ai/providers';
 
 /*
  * Recorded AI responses for the sales demo, replayed only when a live OpenAI
@@ -17,7 +17,7 @@ const none = {
 
 export const salesRecording: Recording = {
     provenance:
-        'Hand-authored to the flow.js structured-output contracts; validated against the sales registry by src/demo/demo.test.ts.',
+        'Hand-authored to the flow.js structured-output contracts; validated against the sales registry by apps/demo/src/demo/demo.test.ts.',
 
     generation: {
         reasoning:

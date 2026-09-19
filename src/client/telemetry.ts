@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
-import type { TelemetryEventType } from '@/flow/store';
+import type { TelemetryEventType } from '@flowjs/core/flow/store';
 
 /*
  * Client-side semantic telemetry. Every generated component reports through

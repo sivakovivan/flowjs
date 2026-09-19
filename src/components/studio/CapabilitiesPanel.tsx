@@ -1,6 +1,6 @@
 'use client';
 
-import type { StudioState } from '@/client/api';
+import type { StudioState } from '@flowjs/core/client/api';
 
 /** What the developer supplied: capabilities and their graph, not a layout. */
 export function CapabilitiesPanel({ studio }: { studio: StudioState }) {

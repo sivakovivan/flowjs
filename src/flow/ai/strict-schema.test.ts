@@ -1,6 +1,6 @@
 import { zodTextFormat } from 'openai/helpers/zod';
 import { expect, it } from 'vitest';
-import { GeneratedSchemaOutput, OptimizationOutput } from '@/flow/ai/contracts';
+import { GeneratedSchemaOutput, OptimizationOutput } from './contracts';
 
 // OpenAI strict mode: every object lists all properties as required and forbids extras.
 function strictProblems(node: any, path = '$'): string[] {

@@ -38,7 +38,13 @@ test('capabilities in, adaptive interface out', async ({ page }) => {
             .locator('[data-component="revenue-chart"] .app-chart')
             .click();
     }
+    const exported = page.waitForResponse(
+        (response) =>
+            response.url().endsWith('/api/flow/actions/exportReport'),
+        { timeout: 60_000 }
+    );
     await page.getByRole('button', { name: 'Export CSV' }).click();
+    expect((await exported).ok()).toBeTruthy();
     await expect(
         page.getByText(/Exported \d+ of \d+ transactions/)
     ).toBeVisible();

@@ -1,8 +1,8 @@
 import * as Sentry from '@sentry/nextjs';
 import { z } from 'zod';
-import { parseDataOutput } from '@/flow/data-contracts';
-import { CapabilityInputError } from '@/flow/registry';
-import { getRuntime } from './flow';
+import { parseDataOutput } from '../flow/data-contracts';
+import { CapabilityInputError } from '../flow/registry';
+import type { FlowRuntime } from '../flow/runtime';
 
 /*
  * Execute a registered capability inside a Sentry span, and record the locally
@@ -23,11 +23,11 @@ export const ActionRequest = CallContext.extend({
 });
 
 export async function runCapability(
+    runtime: FlowRuntime,
     kind: 'data' | 'action',
     capabilityId: string,
     context: z.infer<typeof ActionRequest>
 ) {
-    const runtime = getRuntime();
     const { app, store } = runtime;
     const capability = app.capability(capabilityId);
     if (!capability || capability.kind !== kind) {

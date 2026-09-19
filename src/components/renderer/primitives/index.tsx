@@ -1,7 +1,7 @@
 'use client';
 
-import type { ClientCapability } from '@/client/api';
-import type { UIComponent } from '@/flow/schema';
+import type { ClientCapability } from '@flowjs/core/client/api';
+import type { UIComponent } from '@flowjs/core/flow/schema';
 import {
     ActionButton,
     ActionButtonGroup,

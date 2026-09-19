@@ -2,6 +2,8 @@
 
 This document describes the implemented hackathon MVP. flow.js runs as one Next.js application with a fictional sales dashboard. The application owns both the browser UI and the server API; SQLite is its local persistent store. OpenAI and Sentry are optional external services. There is no separate worker, queue, cache service, or deployment configuration in this repository.
 
+The pnpm workspace separates `@flowjs/core` at the repository root from the `@flowjs/demo` Next.js app in `apps/demo`. The demo imports runtime modules, browser components, the API client, and capability execution from `@flowjs/core`. It owns the sales capability registration, fictional data, recordings, Next.js routes, and server bootstrap that wires those pieces together.
+
 ## System map
 
 ```text
@@ -23,11 +25,11 @@ Browser Sentry SDK --> Sentry tracing and Session Replay (optional)
 
 | Layer            | Location                                                            | Responsibility                                                                                                                                   |
 | ---------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| App and API      | `src/app/page.tsx`, `src/app/api/flow/`                             | Render the studio and expose route handlers for state, generation, telemetry, metrics, optimization, settings, history, data, and actions.       |
+| App and API      | `apps/demo/src/app/page.tsx`, `apps/demo/src/app/api/flow/`         | Render the studio and expose route handlers for state, generation, telemetry, metrics, optimization, settings, history, data, and actions.       |
 | Browser          | `src/components/studio/`, `src/components/renderer/`, `src/client/` | Render the active UI schema, call the API, animate layout changes, and collect semantic interaction events.                                      |
-| Server adapter   | `src/server/`                                                       | Create the runtime singleton, choose AI providers, handle API errors, and execute registered capabilities inside Sentry spans.                   |
+| Server adapter   | `src/server/`, `apps/demo/src/server/`                              | Reusable capability execution and API error handling, plus demo-specific runtime composition.                                                    |
 | Core runtime     | `src/flow/`                                                         | Register capabilities, validate schemas, derive metrics and friction findings, score and validate mutations, manage versions, and persist state. |
-| Demo application | `src/demo/`                                                         | Define sales capabilities, fictional data, and recorded AI responses.                                                                            |
+| Demo application | `apps/demo/src/demo/`                                               | Define sales capabilities, fictional data, and recorded AI responses.                                                                            |
 
 The browser receives capability descriptions and UI schemas, then renders known primitives. The executable data and action functions stay on the server. Requests to `/api/flow/data/[capability]` and `/api/flow/actions/[capability]` execute only registered capabilities; input and output contracts are checked at that boundary.
 
@@ -45,7 +47,7 @@ OpenAI uses the server-side Responses API with structured Zod outputs. If no API
 
 ## Persistence
 
-`FlowStore` uses Node 24's built-in `node:sqlite` with WAL mode and foreign keys enabled. The default database is `.flow/flow.db`; `FLOW_DB_PATH` overrides it. Tables are created automatically when the runtime first opens the database:
+`FlowStore` uses Node 24's built-in `node:sqlite` with WAL mode and foreign keys enabled. The default database is `apps/demo/.flow/flow.db` when started from the workspace root; `FLOW_DB_PATH` overrides it. Tables are created automatically when the runtime first opens the database:
 
 | Table                                  | Data                                                                                                                                                                |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -58,9 +60,9 @@ Metrics are computed on request rather than stored as aggregates. The app curren
 
 ## Observability and configuration
 
-`src/instrumentation.ts` initializes server Sentry tracing and logs when a DSN exists. `src/instrumentation-client.ts` initializes browser tracing and Session Replay. Capability spans carry capability, component, version, session, and replay IDs; measured latency and trace ID are also saved locally so friction analysis can distinguish a slow backend call from a hard-to-use interface. Without Sentry credentials, local latency measurement and the dashboard still work.
+`apps/demo/src/instrumentation.ts` initializes server Sentry tracing and logs when a DSN exists. `apps/demo/src/instrumentation-client.ts` initializes browser tracing and Session Replay. Capability spans carry capability, component, version, session, and replay IDs; measured latency and trace ID are also saved locally so friction analysis can distinguish a slow backend call from a hard-to-use interface. Without Sentry credentials, local latency measurement and the dashboard still work.
 
-Node 24 or later and pnpm are required. Run `pnpm install` and `pnpm dev` for local development, then open `http://localhost:3000`. Configuration is documented in `.env.example`: `OPENAI_API_KEY`, `OPENAI_MODEL`, and `FLOW_AI_MODE` control AI behavior; `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`, and related Sentry variables control observability; `FLOW_DB_PATH` selects the database file. `pnpm db:reset` deletes the local database. `pnpm test`, `pnpm test:e2e`, `pnpm typecheck`, and `pnpm build` are the available verification commands.
+Node 24 or later and pnpm are required. Run `pnpm install` and `pnpm dev` for local development, then open `http://localhost:3000`. Configuration is documented in `apps/demo/.env.example`: `OPENAI_API_KEY`, `OPENAI_MODEL`, and `FLOW_AI_MODE` control AI behavior; `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`, and related Sentry variables control observability; `FLOW_DB_PATH` selects the database file. `pnpm db:reset` deletes the local database. `pnpm test`, `pnpm --dir apps/demo test`, `pnpm test:e2e`, both package typechecks, and `pnpm build` are the available verification commands.
 
 ## Current scope
 

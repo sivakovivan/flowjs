@@ -1,6 +1,6 @@
 # flow.js
 
-An adaptive interface runtime. Developers register what their application can do (data, actions, state, context and a theme). flow.js asks OpenAI for a first dashboard, instruments it, watches how it is used alongside Sentry traces, and proposes structured interface mutations. Validated mutations are applied with animation and saved as immutable versions, with history and undo.
+An adaptive interface runtime. Developers register what their application can do (data, actions, state, context and a theme). flow.js asks a model (routed through BackBoard, or OpenAI directly) for a first dashboard, instruments it, watches how it is used alongside Sentry traces, and proposes structured interface mutations. Validated mutations are applied with animation and saved as immutable versions, with history and undo.
 
 > Developers build the functionality once. flow.js continuously improves how users access it.
 
@@ -22,9 +22,13 @@ Without any credentials the app still runs end to end. It replays recorded AI re
 
 | Variable | Purpose |
 | --- | --- |
-| `OPENAI_API_KEY` | Enables live OpenAI calls for dashboard generation and optimization reasoning. Server-side only. |
+| `BACKBOARD_API_KEY` | Enables BackBoard: routed models, structured output and decision memory. When set, BackBoard is the AI provider. Server-side only. |
+| `BACKBOARD_ROUTING` | `rules` (default): flow.js picks the model tier. `openrouter-auto`: OpenRouter picks a model within a cost tier. |
+| `BACKBOARD_MODEL_FAST`, `_BALANCED`, `_DEEP` | Tier overrides as `provider/model`. |
+| `FLOW_AI_PROVIDER` | Force `backboard` or `openai` when both keys are set. |
+| `OPENAI_API_KEY` | Direct OpenAI calls, used when BackBoard is not configured. Server-side only. |
 | `OPENAI_MODEL` | Model override. Default `gpt-5.5`. |
-| `FLOW_AI_MODE` | Fallback switch. `live` (default) calls OpenAI and falls back to recordings if a call fails or returns malformed output. `recorded` always replays recordings, which is useful when presenting on bad Wi-Fi. |
+| `FLOW_AI_MODE` | Fallback switch. `live` (default) calls the AI provider and falls back to recordings if a call fails or returns malformed output. `recorded` always replays recordings and makes no network calls, which is useful when presenting on bad Wi-Fi. |
 | `NEXT_PUBLIC_SENTRY_DSN` | Browser Sentry: Tracing and Session Replay. |
 | `SENTRY_DSN` | Server Sentry: capability spans and Logs. Falls back to `NEXT_PUBLIC_SENTRY_DSN`. |
 | `NEXT_PUBLIC_SENTRY_ORG` | Optional. Turns trace ids in the evidence panel into links to your Sentry org. |
@@ -41,7 +45,30 @@ pnpm db:reset   # deletes the database; the next page load shows "No dashboard l
 
 Tables follow the spec's data model: `applications`, `capabilities`, `ui_versions`, `version_activations`, `telemetry_events`, `capability_calls`, `optimization_runs`. UI versions are immutable: SQLite triggers reject any `UPDATE` or `DELETE`. Metrics are derived from events when requested, so there is no `telemetry_aggregates` table.
 
+## BackBoard
+
+With `BACKBOARD_API_KEY` set, all reasoning goes through [BackBoard](https://docs.backboard.io) (`src/flow/ai/backboard.ts`), verified live on 2026-09-19.
+
+- **Structured output.** BackBoard's `json_output` guarantees a JSON object, not a schema, so flow.js enforces the structure itself:
+  - The JSON Schema goes in the system prompt.
+  - The reply is parsed with Zod and checked by the runtime validator (registry checks for schemas, the mutation engine for proposals).
+  - Problems are sent back in the same thread for one repair turn, then the route escalates to the next model tier in a fresh thread.
+- **Model routing** (`src/flow/ai/routing.ts`). flow.js picks the cheapest tier that fits the task:
+  - balanced for layout generation;
+  - fast for a single finding on a small dashboard;
+  - deep when interface and backend-performance findings conflict;
+  - never fast when the developer undid an earlier change.
+  - Defaults: `openai/gpt-5.6-luna`, `openai/gpt-5.6-sol`, `anthropic/claude-sonnet-5`. The last tier is a second vendor so escalation also survives an outage.
+  - The live badge shows the routed model, tier, reason, repairs, tokens and latency.
+- **Decision memory** (`src/flow/memory.ts`). After a version is applied, undone or restored, flow.js stores the decision on the app's BackBoard assistant (`flowjs-sales-demo`).
+  - The most recent decisions are recalled into the next optimization and listed in the evidence panel under "Remembered decisions". Verified live: after an undo, the model proposed a different change and said why.
+  - Memory is best-effort and never blocks the loop.
+  - `pnpm db:reset` clears it.
+- **Evaluation.** `pnpm eval:backboard` measures validity, decision accuracy, latency and tokens per tier against asserted thresholds. See [evals/README.md](evals/README.md) for the method, results and findings.
+
 ## OpenAI
+
+Used directly only when BackBoard is not configured. This path has not been exercised live: the OpenAI account had no credits.
 
 OpenAI is called server-side through the Responses API with Zod structured outputs (`responses.parse` + `zodTextFormat`) in two places:
 
@@ -91,7 +118,8 @@ src/flow/            the runtime (framework-agnostic, fully unit tested)
                      oversized low-value component, high-retry action (UI vs backend)
   store.ts           node:sqlite persistence with immutable versions
   runtime.ts         generate → analyze → propose → validate → score → apply / undo
-  ai/                OpenAI contracts, briefs, live and recorded providers
+  ai/                output contracts, briefs, model routing, BackBoard / OpenAI / recorded providers
+  memory.ts          decision memory: applied, undone and restored versions
 src/demo/            the developer's code: sales capabilities, fictional data, recordings
 src/server/          runtime singleton, Sentry-instrumented capability execution
 src/app/api/flow/    route handlers
@@ -105,6 +133,7 @@ src/client/          API client and semantic telemetry tracker
 pnpm test        # unit tests: registry, schema, mutations, scoring, store, metrics,
                  # heuristics, runtime (AI failure and fallback), demo recordings
 pnpm test:e2e    # Playwright in local Chrome: the full demo loop in recorded mode
+pnpm eval:backboard  # live BackBoard evaluation (costs credits); see evals/README.md
 pnpm typecheck
 pnpm build
 ```

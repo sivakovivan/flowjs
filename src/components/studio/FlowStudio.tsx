@@ -66,6 +66,7 @@ export function FlowStudio({
     );
     const [tab, setTab] = useState<Tab>('telemetry');
     const [historyOpen, setHistoryOpen] = useState(false);
+    const [operationsOpen, setOperationsOpen] = useState(false);
     const [showTelemetry, setShowTelemetry] = useState(true);
     const [rate, setRate] = useState(0.5);
     const [busy, setBusy] = useState(false);
@@ -536,12 +537,14 @@ export function FlowStudio({
                             <button
                                 type="button"
                                 className="operations-button"
-                                aria-expanded={historyOpen}
-                                onClick={() => setHistoryOpen((open) => !open)}
+                                aria-expanded={operationsOpen}
+                                onClick={() =>
+                                    setOperationsOpen((open) => !open)
+                                }
                             >
                                 Operations
                             </button>
-                            {historyOpen && (
+                            {operationsOpen && (
                                 <div
                                     className="operations-menu"
                                     role="menu"
@@ -558,21 +561,22 @@ export function FlowStudio({
                                     <button
                                         type="button"
                                         role="menuitem"
-                                        onClick={() => setHistoryOpen(true)}
+                                        onClick={() => {
+                                            setOperationsOpen(false);
+                                            setHistoryOpen(true);
+                                        }}
                                     >
                                         Version history
                                     </button>
-                                    {historyOpen && (
-                                        <HistoryMenu
-                                            versions={studio.versions}
-                                            activeId={active.id}
-                                            onRestore={restore}
-                                            onClose={() =>
-                                                setHistoryOpen(false)
-                                            }
-                                        />
-                                    )}
                                 </div>
+                            )}
+                            {historyOpen && (
+                                <HistoryMenu
+                                    versions={studio.versions}
+                                    activeId={active.id}
+                                    onRestore={restore}
+                                    onClose={() => setHistoryOpen(false)}
+                                />
                             )}
                         </div>
                     </div>

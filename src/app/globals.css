@@ -208,8 +208,11 @@ pre {
     bottom: 24px;
     z-index: 30;
     display: flex;
-    align-items: end;
+    align-items: flex-end;
     gap: 10px;
+}
+.chat-anchor {
+    position: relative;
 }
 .operations-button,
 .chat-button {
@@ -231,7 +234,7 @@ pre {
     position: absolute;
     right: 0;
     bottom: calc(100% + 10px);
-    width: 300px;
+    width: min(300px, calc(100vw - 32px));
     padding: 8px;
     border: 1px solid var(--rule);
     border-radius: 8px;
@@ -274,6 +277,20 @@ pre {
     padding: 8px;
     background: var(--signal-soft);
     border-radius: 4px;
+}
+
+.history {
+    right: 0;
+    bottom: calc(100% + 10px);
+    max-height: min(70vh, 520px);
+    overflow: auto;
+}
+
+@media (max-width: 520px) {
+    .user-tools {
+        right: 16px;
+        bottom: 16px;
+    }
 }
 
 .rate {

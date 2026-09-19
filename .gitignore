@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# local flow.js database
+.flow/
+
+# env
+.env
+.env.local
+.env*.local
+
+.DS_Store

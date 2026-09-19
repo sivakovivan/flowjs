@@ -35,11 +35,11 @@ export function MenuGlass({ circle = false }: { circle?: boolean }) {
                         curvature: circle ? 0.18 : 0.12,
                         dispersion: 0.16,
                         strength: circle ? 0.2 : 0.12,
-                        frost: 0.35,
+                        frost: 0,
                         brightness: 0,
-                        specular: 0.58,
-                        sheen: 0.42,
-                        glow: 0.18,
+                        specular: 0.3,
+                        sheen: 0.2,
+                        glow: 0.05,
                     }}
                 >
                     <span />

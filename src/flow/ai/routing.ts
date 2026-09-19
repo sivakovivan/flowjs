@@ -21,7 +21,8 @@ export const DEFAULT_TIER_MODELS: TierModels = {
   fast: { provider: "openai", model: "gpt-5.6-luna" },
   balanced: { provider: "openai", model: "gpt-5.6-sol" },
   // A different vendor on the last tier, so escalation also survives a provider outage.
-  deep: { provider: "anthropic", model: "claude-opus-5" },
+  // Not claude-opus-5: measured live it omitted required keys in about half of replies (see evals/README.md).
+  deep: { provider: "anthropic", model: "claude-sonnet-5" },
 };
 
 /** `rules`: flow.js picks the tier. `openrouter-auto`: OpenRouter picks the model inside a cost tier. */

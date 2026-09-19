@@ -137,14 +137,14 @@ describe("structured output over BackBoard", () => {
   it("escalates to the next tier when repair fails, in a fresh thread", async () => {
     const bb = fakeBackboard(["not json", "still not json", JSON.stringify(valid)]);
     const { meta } = await generate(bb);
-    expect(meta).toMatchObject({ model: "anthropic/claude-opus-5", tier: "deep", escalated: true, attempts: 3 });
+    expect(meta).toMatchObject({ model: "anthropic/claude-sonnet-5", tier: "deep", escalated: true, attempts: 3 });
     expect(bb.messages()[2].body).not.toHaveProperty("thread_id");
   });
 
   it("escalates past a model whose request fails", async () => {
     const bb = fakeBackboard([{ status: 429, body: "rate limited" }, JSON.stringify(valid)]);
     const { meta } = await generate(bb);
-    expect(meta).toMatchObject({ model: "anthropic/claude-opus-5", escalated: true });
+    expect(meta).toMatchObject({ model: "anthropic/claude-sonnet-5", escalated: true });
   });
 
   it("throws when no routed model returns usable JSON", async () => {

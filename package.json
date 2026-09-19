@@ -13,6 +13,7 @@
         "start": "next start",
         "typecheck": "tsc --noEmit",
         "format": "prettier --write .",
+        "format:check": "prettier --check package.json src/components/renderer/Dashboard.tsx src/flow/ai/briefs.ts src/flow/metrics.ts src/flow/store.ts",
         "test": "vitest run",
         "test:watch": "vitest",
         "db:reset": "node scripts/db-reset.mjs",

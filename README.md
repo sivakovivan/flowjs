@@ -60,6 +60,7 @@ Every output is parsed with Zod and then validated independently by the runtime 
 - **Tracing:** every capability call (data fetch or action) runs inside a `flow.data` / `flow.action` span. The span carries the capability, component, UI version, session and replay id.
 - **Latency pairing:** the locally measured latency is stored with the span's trace id. Heuristics use it to separate interface friction from backend performance. For example, retries on the slow PDF export are diagnosed as backend performance with no redesign. The evidence panel links trace ids when `NEXT_PUBLIC_SENTRY_ORG` is set.
 - **Session Replay:** records sessions, and the replay id is attached to every telemetry event and capability call.
+- **Richer interaction telemetry:** generated components record first view, pointer hover, focus, scroll direction, clicks, value changes, completions, errors, and attempts to interact with disabled controls. These signals are persisted as semantic flow events and included in optimization evidence so repeated dead ends can be distinguished from ordinary use.
 - **Logs:** capability successes and failures are logged via `Sentry.logger`.
 
 Sentry is optional: with no DSN the dashboard works unchanged and latency is still measured locally. The full path against a configured Sentry project has **not** been verified yet (no DSN was available while building). Set a DSN, run the demo, and confirm spans and replays arrive.

@@ -81,6 +81,24 @@ function ComponentFrame(props: {
             style={{ gridColumn: `span ${SIZE_SPAN[component.size]}` }}
             data-component={component.id}
             aria-label={capability.label}
+            onPointerEnter={() =>
+                tracker.track(component.id, 'component_hover')
+            }
+            onFocusCapture={() =>
+                tracker.track(component.id, 'component_focus')
+            }
+            onPointerDown={(event) => {
+                const target = event.target as HTMLElement;
+                if (target.closest(':disabled, [aria-disabled="true"]'))
+                    tracker.track(component.id, 'disabled_interaction', {
+                        element: target.tagName.toLowerCase(),
+                    });
+            }}
+            onWheel={(event) =>
+                tracker.track(component.id, 'component_scroll', {
+                    direction: event.deltaY > 0 ? 'forward' : 'backward',
+                })
+            }
         >
             <motion.header layout="position" className="app-card__header">
                 <h2

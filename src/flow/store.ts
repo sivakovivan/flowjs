@@ -44,6 +44,10 @@ export interface ApplicationRecord {
 
 export const TELEMETRY_EVENT_TYPES = [
     'component_view',
+    'component_hover',
+    'component_scroll',
+    'component_focus',
+    'disabled_interaction',
     'component_click',
     'value_change',
     'interaction_start',

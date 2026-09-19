@@ -4,9 +4,12 @@ import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import { useEffect, useRef } from 'react';
 import type { ClientCapability } from '@flowjs/core/client/api';
 import { tracker } from '@flowjs/core/client/telemetry';
-import type { ComponentMetrics } from '@flowjs/core/flow/metrics';
 import { SIZE_SPAN } from '@flowjs/core/flow/primitives';
-import type { ComponentChange, UIComponent, UISchema } from '@flowjs/core/flow/schema';
+import type {
+    ComponentChange,
+    UIComponent,
+    UISchema,
+} from '@flowjs/core/flow/schema';
 import { useRenderer } from './context';
 import { Primitive } from './primitives';
 
@@ -25,31 +28,12 @@ const CHANGE_LABEL: Record<ComponentChange, string> = {
     hidden: 'Hidden',
 };
 
-function formatSeconds(ms: number | null) {
-    return ms === null ? '–' : `${(ms / 1000).toFixed(1)}s`;
-}
-
-function TelemetryChip({ metrics }: { metrics: ComponentMetrics }) {
-    return (
-        <span
-            className="telemetry-chip"
-            title={`Used in ${Math.round(metrics.usageRate * 100)}% of sessions, found after ${formatSeconds(metrics.avgDiscoveryMs)} on average, ${metrics.interactions} interactions`}
-        >
-            <span>{Math.round(metrics.usageRate * 100)}%</span>
-            <span>{formatSeconds(metrics.avgDiscoveryMs)}</span>
-            <span>{metrics.interactions}×</span>
-        </span>
-    );
-}
-
 function ComponentFrame(props: {
     component: UIComponent;
     capability: ClientCapability;
-    metrics: ComponentMetrics | undefined;
     changes: ComponentChange[] | undefined;
-    showTelemetry: boolean;
 }) {
-    const { component, capability, metrics, changes } = props;
+    const { component, capability, changes } = props;
     const ref = useRef<HTMLElement>(null);
     const { versionId } = useRenderer();
 
@@ -117,9 +101,6 @@ function ComponentFrame(props: {
                             .join(', ')}
                     </span>
                 )}
-                {props.showTelemetry && metrics && metrics.interactions > 0 && (
-                    <TelemetryChip metrics={metrics} />
-                )}
             </motion.header>
             <AnimatePresence mode="popLayout" initial={false}>
                 <motion.div
@@ -139,9 +120,7 @@ function ComponentFrame(props: {
 
 export function Dashboard(props: {
     schema: UISchema;
-    metrics: Map<string, ComponentMetrics>;
     changes: Record<string, ComponentChange[]>;
-    showTelemetry: boolean;
 }) {
     const { capabilities } = useRenderer();
     const components = [...props.schema.components]
@@ -159,9 +138,7 @@ export function Dashboard(props: {
                             key={component.id}
                             component={component}
                             capability={capability}
-                            metrics={props.metrics.get(component.id)}
                             changes={props.changes[component.id]}
-                            showTelemetry={props.showTelemetry}
                         />
                     );
                 })}

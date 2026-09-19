@@ -106,7 +106,11 @@ export function createRuntime(deps: {
         if (deps.forceRecorded)
             fallbackReason =
                 'Recorded mode is enabled (FLOW_AI_MODE=recorded).';
-        else if (!live) fallbackReason = 'OPENAI_API_KEY is not configured.';
+        else if (!live)
+            throw new RuntimeError(
+                'OPENAI_API_KEY is required for live AI operations. Set FLOW_AI_MODE=recorded only for explicit demo mode.',
+                503
+            );
         else {
             try {
                 const result = check(await call(live));

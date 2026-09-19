@@ -4,7 +4,6 @@ import { MotionConfig } from 'motion/react';
 import {
     useCallback,
     useEffect,
-    useMemo,
     useRef,
     useState,
     type CSSProperties,
@@ -67,7 +66,6 @@ export function FlowStudio({
     const [tab, setTab] = useState<Tab>('telemetry');
     const [historyOpen, setHistoryOpen] = useState(false);
     const [operationsOpen, setOperationsOpen] = useState(false);
-    const [showTelemetry, setShowTelemetry] = useState(true);
     const [rate, setRate] = useState(0.5);
     const [busy, setBusy] = useState(false);
     const [notices, setNotices] = useState<Notice[]>([]);
@@ -292,17 +290,6 @@ export function FlowStudio({
         }
     }
 
-    const componentMetrics = useMemo(
-        () =>
-            new Map(
-                (metrics?.versionId === activeId
-                    ? metrics.metrics.components
-                    : []
-                ).map((m) => [m.componentId, m])
-            ),
-        [metrics, activeId]
-    );
-
     if (loadError) {
         return (
             <main className="studio studio--error">
@@ -446,16 +433,6 @@ export function FlowStudio({
                                             }
                                         />
                                     )}
-                                <label className="toggle">
-                                    <input
-                                        type="checkbox"
-                                        checked={showTelemetry}
-                                        onChange={(e) =>
-                                            setShowTelemetry(e.target.checked)
-                                        }
-                                    />
-                                    Show telemetry
-                                </label>
                             </div>
                             <RendererProvider
                                 versionId={active.id}
@@ -465,9 +442,7 @@ export function FlowStudio({
                             >
                                 <Dashboard
                                     schema={active.schema}
-                                    metrics={componentMetrics}
                                     changes={changes}
-                                    showTelemetry={showTelemetry}
                                 />
                             </RendererProvider>
                         </section>

@@ -517,6 +517,7 @@ export function FlowStudio({ developerMode = false }: { developerMode?: boolean 
 
                 {active && !developerMode && (
                     <div className="user-tools">
+                        <a className="developer-link" href="/developer">Developer console</a>
                         <CustomizationChat
                             generating={generating}
                             onCustomize={generate}

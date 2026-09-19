@@ -1,22 +1,33 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export function CustomizationChat(props: {
     generating: boolean;
-    onCustomize: () => Promise<void>;
+    onCustomize: (prompt: string) => Promise<void>;
 }) {
+    const ref = useRef<HTMLDivElement>(null);
     const [open, setOpen] = useState(false);
     const [prompt, setPrompt] = useState('');
-    const [sent, setSent] = useState(false);
+    const [sent, setSent] = useState<string | null>(null);
     async function submit() {
         if (!prompt.trim() || props.generating) return;
-        setSent(true);
-        await props.onCustomize();
+        const request = prompt.trim();
+        setSent(request);
+        await props.onCustomize(request);
         setPrompt('');
     }
+    useEffect(() => {
+        if (!open) return;
+        const close = (event: MouseEvent) => {
+            if (ref.current && !ref.current.contains(event.target as Node))
+                setOpen(false);
+        };
+        document.addEventListener('mousedown', close);
+        return () => document.removeEventListener('mousedown', close);
+    }, [open]);
     return (
-        <div className="chat-anchor">
+        <div className="chat-anchor" ref={ref}>
             <button
                 type="button"
                 className="chat-button"
@@ -38,6 +49,8 @@ export function CustomizationChat(props: {
                     </p>
                     {sent && (
                         <p className="chat-message">
+                            <strong>You:</strong> {sent}
+                            <br />
                             I’ll use that direction for the next dashboard
                             iteration.
                         </p>
@@ -46,7 +59,7 @@ export function CustomizationChat(props: {
                         value={prompt}
                         onChange={(event) => {
                             setPrompt(event.target.value);
-                            setSent(false);
+                            setSent(null);
                         }}
                         placeholder="e.g. Make the revenue card more prominent"
                         rows={3}

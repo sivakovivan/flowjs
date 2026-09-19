@@ -72,6 +72,7 @@ export function FlowStudio({
     const [busy, setBusy] = useState(false);
     const [notices, setNotices] = useState<Notice[]>([]);
     const noticeId = useRef(0);
+    const userToolsRef = useRef<HTMLDivElement>(null);
 
     const notify = useCallback((tone: Notice['tone'], text: string) => {
         const id = ++noticeId.current;
@@ -81,6 +82,21 @@ export function FlowStudio({
             4_500
         );
     }, []);
+
+    useEffect(() => {
+        if (developerMode) return;
+        const close = (event: MouseEvent) => {
+            if (
+                userToolsRef.current &&
+                !userToolsRef.current.contains(event.target as Node)
+            ) {
+                setOperationsOpen(false);
+                setHistoryOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', close);
+        return () => document.removeEventListener('mousedown', close);
+    }, [developerMode]);
 
     const refreshState = useCallback(async () => {
         const next = await api.state();
@@ -528,10 +544,29 @@ export function FlowStudio({
                 )}
 
                 {active && !developerMode && (
-                    <div className="user-tools">
+                    <div className="user-tools" ref={userToolsRef}>
                         <CustomizationChat
                             generating={generating}
-                            onCustomize={generate}
+                            onCustomize={async (prompt) => {
+                                setGenerating(true);
+                                try {
+                                    await api.generate(prompt);
+                                    await refreshState();
+                                    notify(
+                                        'ok',
+                                        'Your request created a new dashboard version.'
+                                    );
+                                } catch (error) {
+                                    notify(
+                                        'error',
+                                        error instanceof Error
+                                            ? error.message
+                                            : 'Could not customize the dashboard.'
+                                    );
+                                } finally {
+                                    setGenerating(false);
+                                }
+                            }}
                         />
                         <div className="history-anchor">
                             <button

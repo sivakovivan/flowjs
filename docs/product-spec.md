@@ -191,56 +191,56 @@ Example:
 
 ```ts
 createFlowApp({
-  context: `
+    context: `
     Sales analytics application used to monitor
     revenue, customers, orders, and transactions.
   `,
 
-  data: {
-    revenue: {
-      description: "Revenue over the selected date range",
-      fetch: getRevenue
+    data: {
+        revenue: {
+            description: 'Revenue over the selected date range',
+            fetch: getRevenue,
+        },
+
+        transactions: {
+            description: 'Recent customer transactions',
+            fetch: getTransactions,
+        },
     },
 
-    transactions: {
-      description: "Recent customer transactions",
-      fetch: getTransactions
-    }
-  },
+    actions: {
+        exportReport: {
+            description: 'Export the currently filtered report',
+            inputs: {
+                format: ['csv', 'pdf'],
+            },
+            execute: exportReport,
+        },
 
-  actions: {
-    exportReport: {
-      description: "Export the currently filtered report",
-      inputs: {
-        format: ["csv", "pdf"]
-      },
-      execute: exportReport
+        refundTransaction: {
+            description: 'Refund a selected transaction',
+            inputs: {
+                transactionId: 'string',
+            },
+            execute: refundTransaction,
+        },
     },
 
-    refundTransaction: {
-      description: "Refund a selected transaction",
-      inputs: {
-        transactionId: "string"
-      },
-      execute: refundTransaction
-    }
-  },
+    state: {
+        dateRange: {
+            description: 'Date range applied to analytics',
+            type: 'date-range',
+            default: '30d',
+        },
+    },
 
-  state: {
-    dateRange: {
-      description: "Date range applied to analytics",
-      type: "date-range",
-      default: "30d"
-    }
-  },
-
-  theme: {
-    primary: "#6366f1",
-    radius: 8,
-    spacing: 8,
-    fontFamily: "Inter"
-  }
-})
+    theme: {
+        primary: '#6366f1',
+        radius: 8,
+        spacing: 8,
+        fontFamily: 'Inter',
+    },
+});
 ```
 
 ---
@@ -418,30 +418,30 @@ Example:
 
 ```json
 {
-  "version": 1,
-  "components": [
-    {
-      "id": "revenue",
-      "capability": "revenue",
-      "primitive": "line-chart",
-      "size": "large",
-      "order": 1
-    },
-    {
-      "id": "date-range",
-      "capability": "dateRange",
-      "primitive": "dropdown",
-      "size": "small",
-      "order": 2
-    },
-    {
-      "id": "transactions",
-      "capability": "transactions",
-      "primitive": "table",
-      "size": "large",
-      "order": 3
-    }
-  ]
+    "version": 1,
+    "components": [
+        {
+            "id": "revenue",
+            "capability": "revenue",
+            "primitive": "line-chart",
+            "size": "large",
+            "order": 1
+        },
+        {
+            "id": "date-range",
+            "capability": "dateRange",
+            "primitive": "dropdown",
+            "size": "small",
+            "order": 2
+        },
+        {
+            "id": "transactions",
+            "capability": "transactions",
+            "primitive": "table",
+            "size": "large",
+            "order": 3
+        }
+    ]
 }
 ```
 
@@ -643,13 +643,13 @@ Example event:
 
 ```json
 {
-  "applicationId": "app_1",
-  "sessionId": "session_12",
-  "userId": "user_5",
-  "versionId": "v3",
-  "componentId": "date-range",
-  "event": "component_click",
-  "timestamp": 1758285000
+    "applicationId": "app_1",
+    "sessionId": "session_12",
+    "userId": "user_5",
+    "versionId": "v3",
+    "componentId": "date-range",
+    "event": "component_click",
+    "timestamp": 1758285000
 }
 ```
 
@@ -963,13 +963,13 @@ Example:
 
 ```json
 {
-  "finding": "date-range is difficult to discover",
-  "evidence": [
-    "84% session usage",
-    "6.8s average discovery",
-    "frequent pre-revenue usage"
-  ],
-  "confidence": 0.84
+    "finding": "date-range is difficult to discover",
+    "evidence": [
+        "84% session usage",
+        "6.8s average discovery",
+        "frequent pre-revenue usage"
+    ],
+    "confidence": 0.84
 }
 ```
 
@@ -983,22 +983,22 @@ Example:
 
 ```json
 {
-  "reason": "Date filtering is high-frequency and slow to discover.",
-  "expectedBenefit": 0.23,
-  "confidence": 0.84,
-  "mutations": [
-    {
-      "type": "MOVE",
-      "element": "date-range",
-      "target": "revenue",
-      "position": "before"
-    },
-    {
-      "type": "SWAP_VARIANT",
-      "element": "date-range",
-      "variant": "segmented-control"
-    }
-  ]
+    "reason": "Date filtering is high-frequency and slow to discover.",
+    "expectedBenefit": 0.23,
+    "confidence": 0.84,
+    "mutations": [
+        {
+            "type": "MOVE",
+            "element": "date-range",
+            "target": "revenue",
+            "position": "before"
+        },
+        {
+            "type": "SWAP_VARIANT",
+            "element": "date-range",
+            "variant": "segmented-control"
+        }
+    ]
 }
 ```
 
@@ -1075,7 +1075,7 @@ CHANGE_DEFAULT
 Each application has:
 
 ```ts
-mutationRate: number
+mutationRate: number;
 ```
 
 Range:
@@ -1414,9 +1414,9 @@ Example:
 
 ```json
 {
-  "user": "123",
-  "promote": ["customer-search"],
-  "hide": ["refund-history"]
+    "user": "123",
+    "promote": ["customer-search"],
+    "hide": ["refund-history"]
 }
 ```
 

@@ -1,8 +1,8 @@
-import type { Finding } from "../friction";
-import type { Metrics } from "../metrics";
-import { compatiblePrimitives, SIZE_SPAN } from "../primitives";
-import type { FlowApp } from "../registry";
-import { layoutRows, type UISchema } from "../schema";
+import type { Finding } from '../friction';
+import type { Metrics } from '../metrics';
+import { compatiblePrimitives, SIZE_SPAN } from '../primitives';
+import type { FlowApp } from '../registry';
+import { layoutRows, type UISchema } from '../schema';
 
 /*
  * What OpenAI sees: capability descriptions and contracts, never executable
@@ -10,76 +10,86 @@ import { layoutRows, type UISchema } from "../schema";
  */
 
 export interface GenerationBrief {
-  application: { id: string; name: string; context: string };
-  capabilities: Array<Record<string, unknown>>;
-  dependencies: Array<{ from: string; to: string }>;
-  theme: FlowApp["theme"];
-  grid: { columns: 12; sizes: typeof SIZE_SPAN };
+    application: { id: string; name: string; context: string };
+    capabilities: Array<Record<string, unknown>>;
+    dependencies: Array<{ from: string; to: string }>;
+    theme: FlowApp['theme'];
+    grid: { columns: 12; sizes: typeof SIZE_SPAN };
 }
 
 export interface OptimizationBrief extends GenerationBrief {
-  currentSchema: Array<UISchema["components"][number] & { row: number | null }>;
-  sampleSize: { sessions: number; liveSessions: number; seededSessions: number; interactions: number };
-  componentMetrics: Array<Record<string, unknown>>;
-  topSequences: Metrics["transitions"];
-  backendLatency: Array<Record<string, unknown>>;
-  heuristicFindings: Finding[];
+    currentSchema: Array<
+        UISchema['components'][number] & { row: number | null }
+    >;
+    sampleSize: {
+        sessions: number;
+        liveSessions: number;
+        seededSessions: number;
+        interactions: number;
+    };
+    componentMetrics: Array<Record<string, unknown>>;
+    topSequences: Metrics['transitions'];
+    backendLatency: Array<Record<string, unknown>>;
+    heuristicFindings: Finding[];
 }
 
 export function generationBrief(app: FlowApp): GenerationBrief {
-  return {
-    application: { id: app.id, name: app.name, context: app.context },
-    capabilities: app.capabilities.map((capability) => ({
-      ...capability,
-      compatiblePrimitives: compatiblePrimitives(capability),
-    })),
-    dependencies: app.graph.edges,
-    theme: app.theme,
-    grid: { columns: 12, sizes: SIZE_SPAN },
-  };
+    return {
+        application: { id: app.id, name: app.name, context: app.context },
+        capabilities: app.capabilities.map((capability) => ({
+            ...capability,
+            compatiblePrimitives: compatiblePrimitives(capability),
+        })),
+        dependencies: app.graph.edges,
+        theme: app.theme,
+        grid: { columns: 12, sizes: SIZE_SPAN },
+    };
 }
 
 export function optimizationBrief(input: {
-  app: FlowApp;
-  schema: UISchema;
-  metrics: Metrics;
-  findings: Finding[];
+    app: FlowApp;
+    schema: UISchema;
+    metrics: Metrics;
+    findings: Finding[];
 }): OptimizationBrief {
-  const rows = layoutRows(input.schema);
-  return {
-    ...generationBrief(input.app),
-    currentSchema: input.schema.components.map((c) => ({ ...c, row: rows.get(c.id) ?? null })),
-    sampleSize: {
-      sessions: input.metrics.sessions.total,
-      liveSessions: input.metrics.sessions.live,
-      seededSessions: input.metrics.sessions.seeded,
-      interactions: input.metrics.totalInteractions,
-    },
-    componentMetrics: input.metrics.components.map((m) => ({
-      componentId: m.componentId,
-      capabilityId: m.capabilityId,
-      usageRate: m.usageRate,
-      interactions: m.interactions,
-      avgDiscoveryMs: m.avgDiscoveryMs,
-      avgFirstViewMs: m.avgFirstViewMs,
-      repeatRate: m.repeatRate,
-      retryLatencyMs: m.retryLatencyMs,
-      valueChangesPerUsingSession: m.valueChangesPerUsingSession,
-      errorRate: m.errorRate,
-      followedBy: m.followedBy.slice(0, 3),
-    })),
-    topSequences: input.metrics.transitions.slice(0, 8),
-    backendLatency: input.metrics.latency.map((l) => ({
-      capabilityId: l.capabilityId,
-      kind: l.kind,
-      calls: l.calls,
-      p50Ms: l.p50Ms,
-      p95Ms: l.p95Ms,
-      errorRate: l.errorRate,
-      slow: l.slow,
-    })),
-    heuristicFindings: input.findings,
-  };
+    const rows = layoutRows(input.schema);
+    return {
+        ...generationBrief(input.app),
+        currentSchema: input.schema.components.map((c) => ({
+            ...c,
+            row: rows.get(c.id) ?? null,
+        })),
+        sampleSize: {
+            sessions: input.metrics.sessions.total,
+            liveSessions: input.metrics.sessions.live,
+            seededSessions: input.metrics.sessions.seeded,
+            interactions: input.metrics.totalInteractions,
+        },
+        componentMetrics: input.metrics.components.map((m) => ({
+            componentId: m.componentId,
+            capabilityId: m.capabilityId,
+            usageRate: m.usageRate,
+            interactions: m.interactions,
+            avgDiscoveryMs: m.avgDiscoveryMs,
+            avgFirstViewMs: m.avgFirstViewMs,
+            repeatRate: m.repeatRate,
+            retryLatencyMs: m.retryLatencyMs,
+            valueChangesPerUsingSession: m.valueChangesPerUsingSession,
+            errorRate: m.errorRate,
+            followedBy: m.followedBy.slice(0, 3),
+        })),
+        topSequences: input.metrics.transitions.slice(0, 8),
+        backendLatency: input.metrics.latency.map((l) => ({
+            capabilityId: l.capabilityId,
+            kind: l.kind,
+            calls: l.calls,
+            p50Ms: l.p50Ms,
+            p95Ms: l.p95Ms,
+            errorRate: l.errorRate,
+            slow: l.slow,
+        })),
+        heuristicFindings: input.findings,
+    };
 }
 
 export const GENERATION_INSTRUCTIONS = `You are flow.js, an adaptive interface runtime. A developer registered application capabilities (data, actions, state) instead of designing a dashboard. Produce the first dashboard as a UI schema.

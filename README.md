@@ -20,16 +20,16 @@ Without any credentials the app still runs end to end. It replays recorded AI re
 
 ## Environment variables
 
-| Variable | Purpose |
-| --- | --- |
-| `OPENAI_API_KEY` | Enables live OpenAI calls for dashboard generation and optimization reasoning. Server-side only. |
-| `OPENAI_MODEL` | Model override. Default `gpt-5.5`. |
-| `FLOW_AI_MODE` | Fallback switch. `live` (default) calls OpenAI and falls back to recordings if a call fails or returns malformed output. `recorded` always replays recordings, which is useful when presenting on bad Wi-Fi. |
-| `NEXT_PUBLIC_SENTRY_DSN` | Browser Sentry: Tracing and Session Replay. |
-| `SENTRY_DSN` | Server Sentry: capability spans and Logs. Falls back to `NEXT_PUBLIC_SENTRY_DSN`. |
-| `NEXT_PUBLIC_SENTRY_ORG` | Optional. Turns trace ids in the evidence panel into links to your Sentry org. |
-| `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN` | Optional. Source-map upload at build time. |
-| `FLOW_DB_PATH` | SQLite file. Default `.flow/flow.db`. |
+| Variable                                            | Purpose                                                                                                                                                                                                      |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `OPENAI_API_KEY`                                    | Enables live OpenAI calls for dashboard generation and optimization reasoning. Server-side only.                                                                                                             |
+| `OPENAI_MODEL`                                      | Model override. Default `gpt-5.5`.                                                                                                                                                                           |
+| `FLOW_AI_MODE`                                      | Fallback switch. `live` (default) calls OpenAI and falls back to recordings if a call fails or returns malformed output. `recorded` always replays recordings, which is useful when presenting on bad Wi-Fi. |
+| `NEXT_PUBLIC_SENTRY_DSN`                            | Browser Sentry: Tracing and Session Replay.                                                                                                                                                                  |
+| `SENTRY_DSN`                                        | Server Sentry: capability spans and Logs. Falls back to `NEXT_PUBLIC_SENTRY_DSN`.                                                                                                                            |
+| `NEXT_PUBLIC_SENTRY_ORG`                            | Optional. Turns trace ids in the evidence panel into links to your Sentry org.                                                                                                                               |
+| `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN` | Optional. Source-map upload at build time.                                                                                                                                                                   |
+| `FLOW_DB_PATH`                                      | SQLite file. Default `.flow/flow.db`.                                                                                                                                                                        |
 
 ## Database
 

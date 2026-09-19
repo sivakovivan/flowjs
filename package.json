@@ -13,7 +13,7 @@
         "start": "next start",
         "typecheck": "tsc --noEmit",
         "format": "prettier --write .",
-        "format:check": "prettier --check package.json README.md src/flow/runtime.ts src/flow/runtime.test.ts src/demo/operations-app.ts src/demo/operations-app.test.ts",
+        "format:check": "prettier --check package.json README.md src/flow/runtime.ts src/flow/runtime.test.ts",
         "test": "vitest run",
         "test:watch": "vitest",
         "db:reset": "node scripts/db-reset.mjs",

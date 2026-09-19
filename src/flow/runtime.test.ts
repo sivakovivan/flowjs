@@ -322,6 +322,7 @@ describe("provider call metadata and repair", () => {
     routeReason: "test",
     attempts: 2,
     repairs: 1,
+    rejections: ["stub: bad"],
     escalated: false,
     inputTokens: 10,
     outputTokens: 5,

@@ -24,6 +24,8 @@ export interface CallMeta {
   /** Model calls made, including repairs and escalations. */
   attempts: number;
   repairs: number;
+  /** Why replies were rejected, for debugging and evaluation. */
+  rejections: string[];
   escalated: boolean;
   inputTokens: number;
   outputTokens: number;

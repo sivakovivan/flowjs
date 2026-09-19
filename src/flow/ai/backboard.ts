@@ -153,6 +153,7 @@ export function createBackboardProvider(options: {
       routeReason: route.reason,
       attempts: 0,
       repairs: 0,
+      rejections: [],
       escalated: false,
       inputTokens: 0,
       outputTokens: 0,
@@ -194,6 +195,7 @@ export function createBackboardProvider(options: {
         let { errors } = await attempt(step, JSON.stringify(brief), null);
         for (let repair = 0; errors.length > 0 && repair < MAX_REPAIRS_PER_MODEL; repair++) {
           meta.repairs += 1;
+          meta.rejections.push(`${step.provider}/${step.model}: ${errors.slice(0, 3).join(" | ")}`);
           ({ errors } = await attempt(
             step,
             `The flow.js validator rejected your previous reply:\n- ${errors.slice(0, 8).join("\n- ")}\nReturn the corrected, complete JSON object only.`,

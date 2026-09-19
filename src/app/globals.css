@@ -1088,7 +1088,8 @@ pre {
 }
 
 .app-segmented {
-  flex-wrap: nowrap;
+  /* Wrap rather than overlap when the model puts many options in a narrow cell. */
+  flex-wrap: wrap;
   gap: 0;
   padding: 3px;
   border-radius: var(--app-radius);
@@ -1096,8 +1097,8 @@ pre {
 }
 
 .app-segmented button {
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 auto;
+  min-width: max-content;
   height: 32px;
   padding: 0 10px;
   border: 0;

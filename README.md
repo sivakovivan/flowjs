@@ -20,16 +20,16 @@ Without any credentials the app still runs end to end. It replays recorded AI re
 
 ## Environment variables
 
-| Variable                                            | Purpose                                                                                                                                                                                                      |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `OPENAI_API_KEY`                                    | Enables live OpenAI calls for dashboard generation and optimization reasoning. Server-side only.                                                                                                             |
-| `OPENAI_MODEL`                                      | Model override. Default `gpt-5.5`.                                                                                                                                                                           |
-| `FLOW_AI_MODE`                                      | Fallback switch. `live` (default) calls OpenAI and falls back to recordings if a call fails or returns malformed output. `recorded` always replays recordings, which is useful when presenting on bad Wi-Fi. |
-| `NEXT_PUBLIC_SENTRY_DSN`                            | Browser Sentry: Tracing and Session Replay.                                                                                                                                                                  |
-| `SENTRY_DSN`                                        | Server Sentry: capability spans and Logs. Falls back to `NEXT_PUBLIC_SENTRY_DSN`.                                                                                                                            |
-| `NEXT_PUBLIC_SENTRY_ORG`                            | Optional. Turns trace ids in the evidence panel into links to your Sentry org.                                                                                                                               |
-| `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN` | Optional. Source-map upload at build time.                                                                                                                                                                   |
-| `FLOW_DB_PATH`                                      | SQLite file. Default `.flow/flow.db`.                                                                                                                                                                        |
+| Variable                                            | Purpose                                                                                                                                  |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPENAI_API_KEY`                                    | Required for live dashboard generation and optimization reasoning. Server-side only.                                                     |
+| `OPENAI_MODEL`                                      | Model override. Default `gpt-5.5`.                                                                                                       |
+| `FLOW_AI_MODE`                                      | `live` (default) requires `OPENAI_API_KEY`; `recorded` explicitly uses the demo recordings and is intended only for presentations/tests. |
+| `NEXT_PUBLIC_SENTRY_DSN`                            | Browser Sentry: Tracing and Session Replay.                                                                                              |
+| `SENTRY_DSN`                                        | Server Sentry: capability spans and Logs. Falls back to `NEXT_PUBLIC_SENTRY_DSN`.                                                        |
+| `NEXT_PUBLIC_SENTRY_ORG`                            | Optional. Turns trace ids in the evidence panel into links to your Sentry org.                                                           |
+| `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN` | Optional. Source-map upload at build time.                                                                                               |
+| `FLOW_DB_PATH`                                      | SQLite file. Default `.flow/flow.db`.                                                                                                    |
 
 ## Database
 
@@ -53,7 +53,7 @@ Every output is parsed with Zod and then validated independently by the runtime 
 - **Generation:** if a live output is invalid or the call fails, flow.js replays the recorded response instead. An invalid schema is never persisted.
 - **Optimization:** if a live proposal is well formed but unsafe, it is shown as rejected together with the reasons, and nothing changes.
 
-**Recorded responses** live in `src/demo/recordings.ts`. They were hand-authored to the same output contracts and are validated against the demo registry by `src/demo/demo.test.ts`; they were not captured from a live call. The UI labels them as recorded and shows the fallback reason. With an API key configured, verify the live path before relying on it in a demo.
+**Recorded responses** live in `src/demo/recordings.ts`. They are available only when `FLOW_AI_MODE=recorded` is explicitly selected. They were hand-authored to the same output contracts and are validated against the demo registry by `src/demo/demo.test.ts`; they are not a fallback for missing credentials and must not be used for a foreign application.
 
 ## Sentry
 

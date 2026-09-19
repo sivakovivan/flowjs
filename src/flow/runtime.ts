@@ -1,8 +1,9 @@
 import { generationBrief, optimizationBrief } from "./ai/briefs";
 import { GeneratedSchemaOutput, OptimizationOutput, toMutation, toUISchema } from "./ai/contracts";
-import type { FlowAIProvider } from "./ai/providers";
+import { ProviderOutput, type CallMeta, type FlowAIProvider, type OutputCheck } from "./ai/providers";
 import { findFriction, type Finding } from "./friction";
 import { computeMetrics, type Metrics } from "./metrics";
+import { decisionMemory, RECALL_LIMIT, RECALL_QUERY, type FlowMemory, type RecalledMemory } from "./memory";
 import { applyMutations, type Mutation } from "./mutations";
 import { seedSessions } from "./seed";
 import type { FlowApp } from "./registry";
@@ -31,6 +32,8 @@ export interface AIProvenance {
   model: string;
   /** Why the live call was not used, when it was not. */
   fallbackReason: string | null;
+  /** Routing, repair and usage details when the provider reports them. */
+  call: CallMeta | null;
 }
 
 export interface OptimizationAnalysis {
@@ -38,6 +41,8 @@ export interface OptimizationAnalysis {
   findings: Finding[];
   sampleSize: { sessions: number; liveSessions: number; seededSessions: number; interactions: number };
   latency: Metrics["latency"];
+  /** Earlier decisions recalled from memory and given to the model. */
+  memories: RecalledMemory[];
   score: MutationScore | null;
   decision: { autoApply: boolean; threshold: number | null };
 }
@@ -78,34 +83,66 @@ export function createRuntime(deps: {
   recorded: FlowAIProvider;
   /** Skip live calls and replay recordings (the presentation fallback switch). */
   forceRecorded?: boolean;
+  /** Optional decision memory, recalled into optimizations. Failures never block the loop. */
+  memory?: FlowMemory;
   now?: () => number;
 }) {
-  const { app, store, live, recorded } = deps;
+  const { app, store, live, recorded, memory } = deps;
   const now = deps.now ?? Date.now;
   store.syncApplication(app);
 
   /** Try the live provider, falling back to recordings on failure or malformed output. */
   async function withFallback<T>(
-    call: (provider: FlowAIProvider) => Promise<unknown>,
+    call: (provider: FlowAIProvider, repairCheck: OutputCheck) => Promise<unknown | ProviderOutput>,
     check: (output: unknown) => Check<T>,
+    /** Stricter check a provider may use to repair its output; defaults to `check`. */
+    repairCheck: OutputCheck = (output) => {
+      const result = check(output);
+      return result.ok ? [] : result.errors;
+    },
   ): Promise<{ value: T; provenance: AIProvenance }> {
+    const unwrap = (raw: unknown | ProviderOutput) =>
+      raw instanceof ProviderOutput ? { output: raw.output, meta: raw.meta } : { output: raw, meta: null };
     let fallbackReason: string | null = null;
     if (deps.forceRecorded) fallbackReason = "Recorded mode is enabled (FLOW_AI_MODE=recorded).";
     else if (!live) fallbackReason = "OPENAI_API_KEY is not configured.";
     else {
       try {
-        const result = check(await call(live));
-        if (result.ok) return { value: result.value, provenance: { source: "live", model: live.model, fallbackReason: null } };
+        const { output, meta } = unwrap(await call(live, repairCheck));
+        const result = check(output);
+        if (result.ok) {
+          return {
+            value: result.value,
+            provenance: { source: "live", model: meta?.model ?? live.model, fallbackReason: null, call: meta },
+          };
+        }
         fallbackReason = `Live output failed validation: ${result.errors.slice(0, 3).join(" ")}`;
       } catch (error) {
         fallbackReason = `Live call failed: ${errorMessage(error)}`;
       }
     }
-    const result = check(await call(recorded));
+    const result = check(unwrap(await call(recorded, repairCheck)).output);
     if (!result.ok) {
       throw new RuntimeError(`Recorded response is invalid: ${result.errors.join(" ")}`, 500);
     }
-    return { value: result.value, provenance: { source: "recorded", model: recorded.model, fallbackReason } };
+    return { value: result.value, provenance: { source: "recorded", model: recorded.model, fallbackReason, call: null } };
+  }
+
+  // Memory is best-effort: a slow or failing memory service must never block the loop.
+  const pendingMemory = new Set<Promise<void>>();
+  function remember(content: string, metadata: Record<string, unknown>) {
+    if (!memory) return;
+    const write = memory.remember(content, metadata).catch(() => undefined);
+    pendingMemory.add(write);
+    void write.finally(() => pendingMemory.delete(write));
+  }
+  async function recall(): Promise<RecalledMemory[]> {
+    if (!memory) return [];
+    try {
+      return await memory.recall(RECALL_QUERY, RECALL_LIMIT);
+    } catch {
+      return [];
+    }
   }
 
   function activeVersion(): VersionRecord {
@@ -144,7 +181,7 @@ export function createRuntime(deps: {
       if (existing) return { version: existing, provenance: null };
 
       const { value, provenance } = await withFallback<{ schema: UISchema; reasoning: string }>(
-        (provider) => provider.generateSchema(generationBrief(app)),
+        (provider, repairCheck) => provider.generateSchema(generationBrief(app), repairCheck),
         (output) => {
           const parsed = GeneratedSchemaOutput.safeParse(output);
           if (!parsed.success) return { ok: false, errors: parsed.error.issues.map((i) => i.message) };
@@ -177,14 +214,30 @@ export function createRuntime(deps: {
       if (metrics.totalInteractions === 0) {
         throw new RuntimeError("No interactions recorded for this version yet. Use the dashboard first.", 409);
       }
-      const brief = optimizationBrief({ app, schema: version.schema, metrics, findings });
+      const memories = await recall();
+      const brief = optimizationBrief({
+        app,
+        schema: version.schema,
+        metrics,
+        findings,
+        pastDecisions: memories.map((m) => m.content),
+      });
+      const parseOutput = (raw: unknown): Check<OptimizationOutput> => {
+        const parsed = OptimizationOutput.safeParse(raw);
+        return parsed.success
+          ? { ok: true, value: parsed.data }
+          : { ok: false, errors: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) };
+      };
       const { value: output, provenance } = await withFallback<OptimizationOutput>(
-        (provider) => provider.proposeOptimization(brief),
+        (provider, repairCheck) => provider.proposeOptimization(brief, repairCheck),
+        parseOutput,
+        // A provider that can repair gets the mutation validator's verdict too.
         (raw) => {
-          const parsed = OptimizationOutput.safeParse(raw);
-          return parsed.success
-            ? { ok: true, value: parsed.data }
-            : { ok: false, errors: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) };
+          const parsed = parseOutput(raw);
+          if (!parsed.ok) return parsed.errors;
+          if (parsed.value.mutations.length === 0) return [];
+          const applied = applyMutations(version.schema, parsed.value.mutations.map(toMutation), app);
+          return applied.ok ? [] : applied.errors;
         },
       );
 
@@ -208,6 +261,7 @@ export function createRuntime(deps: {
         findings,
         sampleSize,
         latency: metrics.latency,
+        memories,
         score,
         decision,
       });
@@ -277,7 +331,7 @@ export function createRuntime(deps: {
         );
       }
 
-      return store.transaction(() => {
+      const result = store.transaction(() => {
         const active = activeVersion();
         if (active.id !== run.sourceVersionId) throw new RuntimeError("The dashboard changed. Optimize again.", 409);
         if (mode === "auto") {
@@ -308,11 +362,21 @@ export function createRuntime(deps: {
         store.setRunStatus(run.id, "applied", version.id);
         return { version, run: store.getRun(run.id)! };
       });
+      // Only remember what was actually committed.
+      const sessions = (run.analysis as OptimizationAnalysis).sampleSize.sessions;
+      remember(decisionMemory.applied(app.id, result.version, mode, sessions), {
+        kind: "applied",
+        version: result.version.id,
+      });
+      return result;
     },
 
     undo(): VersionRecord {
       try {
-        return store.undo(app.id);
+        const undone = store.getActiveVersion(app.id);
+        const active = store.undo(app.id);
+        if (undone) remember(decisionMemory.undone(app.id, undone, active), { kind: "undone", version: undone.id });
+        return active;
       } catch (error) {
         if (error instanceof VersionError) throw new RuntimeError(error.message, 409);
         throw error;
@@ -321,7 +385,9 @@ export function createRuntime(deps: {
 
     restore(versionId: string): VersionRecord {
       try {
-        return store.activateVersion(app.id, versionId, "restore");
+        const version = store.activateVersion(app.id, versionId, "restore");
+        remember(decisionMemory.restored(app.id, version), { kind: "restored", version: version.id });
+        return version;
       } catch (error) {
         if (error instanceof VersionError) throw new RuntimeError(error.message, 404);
         throw error;
@@ -377,6 +443,11 @@ export function createRuntime(deps: {
 
     clearSeeded() {
       store.clearSeeded(app.id);
+    },
+
+    /** Wait for queued memory writes (used by tests and graceful shutdown). */
+    async flushMemory() {
+      await Promise.all(pendingMemory);
     },
 
     setMutationRate(rate: number) {

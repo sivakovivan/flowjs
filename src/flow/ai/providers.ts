@@ -11,11 +11,39 @@ import {
 } from "./briefs";
 import { GeneratedSchemaOutput, OptimizationOutput, toMutation } from "./contracts";
 
+/** Returns the problems with an output; empty when it is acceptable. Lets a provider repair before giving up. */
+export type OutputCheck = (output: unknown) => string[];
+
+/** What actually happened on a live call, for provenance and evaluation. */
+export interface CallMeta {
+  vendor: string;
+  /** "provider/model" that produced the returned output. */
+  model: string;
+  tier: string | null;
+  routeReason: string | null;
+  /** Model calls made, including repairs and escalations. */
+  attempts: number;
+  repairs: number;
+  escalated: boolean;
+  inputTokens: number;
+  outputTokens: number;
+  latencyMs: number;
+  threadId: string | null;
+}
+
+/** Optional wrapper a provider returns to attach call metadata to its output. */
+export class ProviderOutput {
+  constructor(
+    readonly output: unknown,
+    readonly meta: CallMeta,
+  ) {}
+}
+
 export interface FlowAIProvider {
   source: "live" | "recorded";
   model: string;
-  generateSchema(brief: GenerationBrief): Promise<unknown>;
-  proposeOptimization(brief: OptimizationBrief): Promise<unknown>;
+  generateSchema(brief: GenerationBrief, check?: OutputCheck): Promise<unknown | ProviderOutput>;
+  proposeOptimization(brief: OptimizationBrief, check?: OutputCheck): Promise<unknown | ProviderOutput>;
 }
 
 export const DEFAULT_OPENAI_MODEL = "gpt-5.5";

@@ -3,7 +3,8 @@ import { fixtureApp } from "./__fixtures__/app";
 import { fixtureSchema } from "./__fixtures__/schema";
 import { dateRangeFriction } from "./__fixtures__/telemetry";
 import type { GeneratedSchemaOutput, OptimizationOutput } from "./ai/contracts";
-import { createRecordedProvider, type FlowAIProvider, type Recording } from "./ai/providers";
+import { createRecordedProvider, ProviderOutput, type CallMeta, type FlowAIProvider, type Recording } from "./ai/providers";
+import type { FlowMemory } from "./memory";
 import { createRuntime, RuntimeError, type OptimizationAnalysis } from "./runtime";
 import { FlowStore } from "./store";
 
@@ -43,7 +44,7 @@ function stub(overrides: Partial<FlowAIProvider>): FlowAIProvider {
 let store: FlowStore;
 let clock: number;
 
-function runtime(live: FlowAIProvider | null, options: { forceRecorded?: boolean } = {}) {
+function runtime(live: FlowAIProvider | null, options: { forceRecorded?: boolean; memory?: FlowMemory } = {}) {
   return createRuntime({
     app,
     store,
@@ -67,7 +68,7 @@ describe("generate", () => {
   it("creates v1 from a live structured output", async () => {
     const { version, provenance } = await runtime(stub({})).generate();
     expect(version).toMatchObject({ id: "v1", parentVersionId: null, source: "generated", aiSource: "live" });
-    expect(provenance).toEqual({ source: "live", model: "stub-model", fallbackReason: null });
+    expect(provenance).toEqual({ source: "live", model: "stub-model", fallbackReason: null, call: null });
   });
 
   it("is idempotent once a dashboard exists", async () => {
@@ -310,5 +311,114 @@ describe("telemetry ingestion", () => {
     expect(rt.analyze().metrics.sessions).toMatchObject({ live: 1, seeded: 4 });
     rt.clearSeeded();
     expect(rt.analyze().metrics.sessions).toMatchObject({ live: 1, seeded: 0 });
+  });
+});
+
+describe("provider call metadata and repair", () => {
+  const meta: CallMeta = {
+    vendor: "backboard",
+    model: "openai/gpt-5.6-sol",
+    tier: "balanced",
+    routeReason: "test",
+    attempts: 2,
+    repairs: 1,
+    escalated: false,
+    inputTokens: 10,
+    outputTokens: 5,
+    latencyMs: 1,
+    threadId: "t",
+  };
+
+  it("records the routed model and call details in provenance", async () => {
+    const live = stub({ generateSchema: async () => new ProviderOutput(structuredClone(generation), meta) });
+    const { provenance } = await runtime(live).generate();
+    expect(provenance).toMatchObject({ source: "live", model: "openai/gpt-5.6-sol", call: { repairs: 1 } });
+  });
+
+  it("hands providers a check that includes the registry and the mutation validator", async () => {
+    const seen: string[][] = [];
+    const invalid = structuredClone(generation);
+    invalid.components[0].capability = "launchMissiles";
+    const unsafe = structuredClone(promoteDateRange);
+    unsafe.mutations[0].element = "ghost";
+    const live = stub({
+      generateSchema: async (_brief, check) => (seen.push(check!(invalid)), structuredClone(generation)),
+      proposeOptimization: async (_brief, check) => (seen.push(check!(unsafe)), structuredClone(promoteDateRange)),
+    });
+    const rt = runtime(live);
+    await rt.generate();
+    recordFriction();
+    await rt.optimize();
+    expect(seen[0].join()).toMatch(/launchMissiles/);
+    expect(seen[1].join()).toMatch(/unknown component "ghost"/);
+  });
+});
+
+describe("decision memory", () => {
+  function fakeMemory(overrides: Partial<FlowMemory> = {}) {
+    const remembered: Array<{ content: string; metadata: Record<string, unknown> }> = [];
+    const memory: FlowMemory = {
+      remember: async (content, metadata) => void remembered.push({ content, metadata }),
+      recall: async () => remembered.map((m) => ({ content: m.content, score: 1 })),
+      reset: async () => void remembered.splice(0),
+      ...overrides,
+    };
+    return { memory, remembered };
+  }
+
+  it("remembers applied, undone and restored versions after they commit", async () => {
+    const { memory, remembered } = fakeMemory();
+    const rt = runtime(stub({}), { memory });
+    await rt.generate();
+    recordFriction();
+    rt.apply((await rt.optimize()).id, "manual");
+    rt.undo();
+    rt.restore("v2");
+    await rt.flushMemory();
+    expect(remembered.map((m) => m.metadata.kind)).toEqual(["applied", "undone", "restored"]);
+    expect(remembered[0].content).toMatch(/applied v2 "Date control promoted beside Revenue" \(MOVE date-range before revenue-chart; SWAP_VARIANT date-range to segmented-control\).*approved by the developer.*3 sessions/);
+    expect(remembered[1].content).toMatch(/developer undid v2 .*returned to v1\. Do not re-propose/);
+  });
+
+  it("does not remember a proposal that failed to apply", async () => {
+    const { memory, remembered } = fakeMemory();
+    const rt = runtime(stub({}), { memory });
+    await rt.generate();
+    rt.setMutationRate(0);
+    recordFriction();
+    const run = await rt.optimize();
+    expect(() => rt.apply(run.id, "auto")).toThrow();
+    await rt.flushMemory();
+    expect(remembered).toEqual([]);
+  });
+
+  it("recalls past decisions into the brief and the evidence", async () => {
+    const { memory } = fakeMemory();
+    let pastDecisions: string[] = [];
+    const live = stub({
+      proposeOptimization: async (brief) => ((pastDecisions = brief.pastDecisions), structuredClone(promoteDateRange)),
+    });
+    const rt = runtime(live, { memory });
+    await rt.generate();
+    recordFriction();
+    rt.apply((await rt.optimize()).id, "manual");
+    rt.undo();
+    await rt.flushMemory();
+    const run = await rt.optimize();
+    expect(pastDecisions.join("\n")).toMatch(/developer undid v2/);
+    expect((run.analysis as OptimizationAnalysis).memories).toHaveLength(2);
+  });
+
+  it("keeps optimizing, applying and undoing when memory is down", async () => {
+    const down = async () => Promise.reject(new Error("memory service down"));
+    const { memory } = fakeMemory({ remember: down, recall: down });
+    const rt = runtime(stub({}), { memory });
+    await rt.generate();
+    recordFriction();
+    const run = await rt.optimize();
+    expect((run.analysis as OptimizationAnalysis).memories).toEqual([]);
+    expect(rt.apply(run.id, "manual").version.id).toBe("v2");
+    expect(rt.undo().id).toBe("v1");
+    await rt.flushMemory();
   });
 });

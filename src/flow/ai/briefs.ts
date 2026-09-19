@@ -24,6 +24,8 @@ export interface OptimizationBrief extends GenerationBrief {
   topSequences: Metrics["transitions"];
   backendLatency: Array<Record<string, unknown>>;
   heuristicFindings: Finding[];
+  /** Earlier interface decisions recalled from memory (applied, undone, restored). */
+  pastDecisions: string[];
 }
 
 export function generationBrief(app: FlowApp): GenerationBrief {
@@ -44,6 +46,7 @@ export function optimizationBrief(input: {
   schema: UISchema;
   metrics: Metrics;
   findings: Finding[];
+  pastDecisions?: string[];
 }): OptimizationBrief {
   const rows = layoutRows(input.schema);
   return {
@@ -79,6 +82,7 @@ export function optimizationBrief(input: {
       slow: l.slow,
     })),
     heuristicFindings: input.findings,
+    pastDecisions: input.pastDecisions ?? [],
   };
 }
 
@@ -103,4 +107,5 @@ Rules:
 - Reference only component ids that exist in currentSchema. Never hide the only visible component of a required capability.
 - Prefer 1-3 mutations. Every mutation must change something.
 - Base evidence on the numbers provided and mention the sample size honestly. Keep confidence modest when the sample is small.
+- pastDecisions lists earlier interface changes and whether the developer undid them. Do not re-propose a change the developer undid unless the evidence is materially stronger now, and say so in the explanation.
 - Set fields that do not apply to a mutation type to null.`;

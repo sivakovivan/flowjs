@@ -102,6 +102,12 @@ describe("generate", () => {
 
   it("uses recordings without an API key or when recorded mode is forced", async () => {
     expect((await runtime(null).generate()).provenance?.fallbackReason).toMatch(/OPENAI_API_KEY/);
+    store = new FlowStore(":memory:");
+    let liveCalled = false;
+    const live = stub({ generateSchema: async () => ((liveCalled = true), structuredClone(generation)) });
+    const forced = await runtime(live, { forceRecorded: true }).generate();
+    expect(forced.provenance).toMatchObject({ source: "recorded", fallbackReason: expect.stringMatching(/Recorded mode/) });
+    expect(liveCalled).toBe(false);
   });
 
   it("creates no version when both live and recorded outputs are unusable", async () => {
@@ -261,5 +267,48 @@ describe("history", () => {
     rt.undo();
     const churned = (await rt.optimize()).score as { disruption: number };
     expect(churned.disruption).toBeGreaterThan(calm.disruption);
+  });
+});
+
+describe("telemetry ingestion", () => {
+  const event = (overrides: Record<string, unknown> = {}) => ({
+    versionId: "v1",
+    sessionId: "s1",
+    componentId: "date-range",
+    eventType: "value_change",
+    sinceLoadMs: 5_000,
+    timestamp: clock,
+    ...overrides,
+  });
+
+  it("accepts events for real components and derives the capability from the schema", async () => {
+    const rt = runtime(stub({}));
+    await rt.generate();
+    const result = rt.recordTelemetry([
+      event(),
+      event({ componentId: "ghost" }),
+      event({ versionId: "v9" }),
+      event({ eventType: "keylogger" }),
+      event({ capabilityId: "refundTransaction" }),
+    ]);
+    expect(result).toEqual({ accepted: 2, rejected: 3 });
+    expect(store.listEvents(app.id, "v1").map((e) => e.capabilityId)).toEqual(["dateRange", "dateRange"]);
+  });
+
+  it("replaces implausible client timestamps with the server clock", async () => {
+    const rt = runtime(stub({}));
+    await rt.generate();
+    rt.recordTelemetry([event({ timestamp: 42 })]);
+    expect(store.listEvents(app.id, "v1")[0].createdAt).toBe(clock);
+  });
+
+  it("seeds flagged sessions that can be cleared without touching live data", async () => {
+    const rt = runtime(stub({}));
+    await rt.generate();
+    rt.recordTelemetry([event()]);
+    rt.seedDemoSessions(4);
+    expect(rt.analyze().metrics.sessions).toMatchObject({ live: 1, seeded: 4 });
+    rt.clearSeeded();
+    expect(rt.analyze().metrics.sessions).toMatchObject({ live: 1, seeded: 0 });
   });
 });

@@ -4,10 +4,20 @@ import type { FlowAIProvider } from "./ai/providers";
 import { findFriction, type Finding } from "./friction";
 import { computeMetrics, type Metrics } from "./metrics";
 import { applyMutations, type Mutation } from "./mutations";
+import { seedSessions } from "./seed";
 import type { FlowApp } from "./registry";
 import { validateSchema, type UISchema } from "./schema";
 import { decideAutoApply, scoreProposal, type MutationScore } from "./scoring";
-import { FlowStore, VersionError, type AISource, type OptimizationRun, type VersionRecord } from "./store";
+import {
+  FlowStore,
+  TELEMETRY_EVENT_TYPES,
+  VersionError,
+  type AISource,
+  type OptimizationRun,
+  type TelemetryEvent,
+  type VersionRecord,
+} from "./store";
+import { z } from "zod";
 
 /*
  * The adaptive loop: generate → observe → analyze → propose → validate →
@@ -31,6 +41,21 @@ export interface OptimizationAnalysis {
   score: MutationScore | null;
   decision: { autoApply: boolean; threshold: number | null };
 }
+
+export const IncomingEvent = z.object({
+  versionId: z.string().max(16),
+  sessionId: z.string().min(1).max(64),
+  userId: z.string().max(64).nullable().default(null),
+  componentId: z.string().max(64),
+  eventType: z.enum(TELEMETRY_EVENT_TYPES),
+  sinceLoadMs: z.number().min(0).max(86_400_000),
+  timestamp: z.number(),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+});
+export type IncomingEvent = z.input<typeof IncomingEvent>;
+
+/** Client clocks are trusted only within this skew. */
+const MAX_CLOCK_SKEW_MS = 10 * 60_000;
 
 export class RuntimeError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -301,6 +326,57 @@ export function createRuntime(deps: {
         if (error instanceof VersionError) throw new RuntimeError(error.message, 404);
         throw error;
       }
+    },
+
+    /**
+     * Ingest client telemetry. Events must reference a real version and a
+     * component in that version; the capability is taken from the schema.
+     */
+    recordTelemetry(raw: unknown[]): { accepted: number; rejected: number } {
+      const schemas = new Map<string, Map<string, string>>();
+      const accepted: TelemetryEvent[] = [];
+      for (const item of raw) {
+        const parsed = IncomingEvent.safeParse(item);
+        if (!parsed.success) continue;
+        const event = parsed.data;
+        if (!schemas.has(event.versionId)) {
+          const version = store.getVersion(app.id, event.versionId);
+          schemas.set(event.versionId, new Map(version?.schema.components.map((c) => [c.id, c.capability]) ?? []));
+        }
+        const capabilityId = schemas.get(event.versionId)!.get(event.componentId);
+        if (!capabilityId) continue;
+        const received = now();
+        accepted.push({
+          applicationId: app.id,
+          versionId: event.versionId,
+          sessionId: event.sessionId,
+          userId: event.userId,
+          componentId: event.componentId,
+          capabilityId,
+          eventType: event.eventType,
+          sinceLoadMs: event.sinceLoadMs,
+          metadata: event.metadata,
+          seeded: false,
+          createdAt: Math.abs(event.timestamp - received) <= MAX_CLOCK_SKEW_MS ? event.timestamp : received,
+        });
+      }
+      store.insertEvents(accepted);
+      return { accepted: accepted.length, rejected: raw.length - accepted.length };
+    },
+
+    /** Add clearly flagged synthetic sessions for the active version. */
+    seedDemoSessions(count: number) {
+      const version = activeVersion();
+      const { events, calls } = seedSessions({ app, schema: version.schema, versionId: version.id, count, now: now() });
+      store.transaction(() => {
+        store.insertEvents(events);
+        for (const call of calls) store.insertCall(call);
+      });
+      return { sessions: count, events: events.length, calls: calls.length };
+    },
+
+    clearSeeded() {
+      store.clearSeeded(app.id);
     },
 
     setMutationRate(rate: number) {

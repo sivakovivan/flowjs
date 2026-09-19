@@ -27,6 +27,7 @@ import { GeneratePrompt } from './GeneratePrompt';
 import { HistoryMenu } from './HistoryMenu';
 import { SourceBadge } from './SourceBadge';
 import { TelemetryPanel } from './TelemetryPanel';
+import { CustomizationChat } from './CustomizationChat';
 
 type Tab = 'evidence' | 'telemetry' | 'capabilities';
 
@@ -46,7 +47,7 @@ function themeStyle(theme: StudioState['application']['theme']): CSSProperties {
     } as CSSProperties;
 }
 
-export function FlowStudio() {
+export function FlowStudio({ developerMode = false }: { developerMode?: boolean }) {
     const [studio, setStudio] = useState<StudioState | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [generating, setGenerating] = useState(false);
@@ -319,7 +320,7 @@ export function FlowStudio() {
                         </span>
                     </div>
 
-                    {active && (
+                    {active && developerMode && (
                         <div className="bar__versions">
                             <span
                                 className="version-badge"
@@ -358,7 +359,7 @@ export function FlowStudio() {
                         </div>
                     )}
 
-                    {active && (
+                    {active && developerMode && (
                         <div className="bar__controls">
                             <label className="rate">
                                 <span className="rate__ends">
@@ -450,7 +451,7 @@ export function FlowStudio() {
                             </RendererProvider>
                         </section>
 
-                        <aside className="panel" aria-label="flow.js runtime">
+                        {developerMode && <aside className="panel" aria-label="flow.js developer console">
                             <div className="tabs" role="tablist">
                                 {(
                                     [
@@ -510,7 +511,28 @@ export function FlowStudio() {
                                     ? 'Sentry tracing and replay are on.'
                                     : 'Sentry is off (no DSN); latency is still measured locally.'}
                             </p>
-                        </aside>
+                        </aside>}
+                    </div>
+                )}
+
+                {active && !developerMode && (
+                    <div className="user-tools">
+                        <CustomizationChat
+                            generating={generating}
+                            onCustomize={generate}
+                        />
+                        <div className="history-anchor">
+                            <button type="button" className="operations-button" aria-expanded={historyOpen} onClick={() => setHistoryOpen((open) => !open)}>
+                                Operations
+                            </button>
+                            {historyOpen && (
+                                <div className="operations-menu" role="menu" aria-label="Dashboard operations">
+                                    <button type="button" role="menuitem" onClick={undo} disabled={!active.parentVersionId}>↶ Undo</button>
+                                    <button type="button" role="menuitem" onClick={() => setHistoryOpen(true)}>Version history</button>
+                                    {historyOpen && <HistoryMenu versions={studio.versions} activeId={active.id} onRestore={restore} onClose={() => setHistoryOpen(false)} />}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
 

@@ -1198,7 +1198,7 @@ pre {
 }
 
 .app-segmented {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 0;
     padding: 3px;
     border-radius: var(--app-radius);
@@ -1206,9 +1206,10 @@ pre {
 }
 
 .app-segmented button {
-    flex: 1;
+    flex: 1 1 72px;
     min-width: 0;
-    height: 32px;
+    min-height: 32px;
+    height: auto;
     padding: 0 10px;
     border: 0;
     border-radius: calc(var(--app-radius) - 2px);
@@ -1216,7 +1217,7 @@ pre {
     color: var(--app-muted);
     font-weight: 500;
     cursor: pointer;
-    white-space: nowrap;
+    white-space: normal;
 }
 
 .app-segmented button.is-active {

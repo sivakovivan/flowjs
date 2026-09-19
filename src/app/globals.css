@@ -379,6 +379,16 @@ pre {
     color: var(--signal);
 }
 
+/* The user operations launcher sits at the viewport's bottom edge, so its
+   history popover must open upward and stay aligned to the launcher. */
+.user-tools .history {
+    top: auto;
+    right: 0;
+    bottom: calc(100% + 10px);
+    left: auto;
+    max-height: min(70vh, 520px);
+}
+
 /* ── workspace ───────────────────────────────────────────────────────────── */
 
 .workspace {

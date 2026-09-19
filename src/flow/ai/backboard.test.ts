@@ -44,7 +44,15 @@ function fakeBackboard(replies: Array<string | { status: number; body: string }>
         output_tokens: 50,
       });
     }
-    if (path.endsWith("/memories/search")) return json({ memories: [{ id: "m1", content: "remembered", score: 0.7 }] });
+    if (path.includes("/memories") && (init?.method ?? "GET") === "GET") {
+      return json({
+        memories: [
+          { id: "m1", content: "older", metadata: { app: "fixture" }, created_at: "2026-09-19T10:00:00" },
+          { id: "m2", content: "other app", metadata: { app: "someone-else" }, created_at: "2026-09-19T12:00:00" },
+          { id: "m3", content: "newer", metadata: { app: "fixture" }, created_at: "2026-09-19T11:00:00" },
+        ],
+      });
+    }
     if (path.endsWith("/memories")) return json({ memory_id: "m1" }, 201);
     return json({}, 404);
   }) as typeof fetch;
@@ -154,14 +162,16 @@ describe("parseJsonReply", () => {
 });
 
 describe("BackBoard memory", () => {
-  it("adds memories with app metadata and recalls by semantic search", async () => {
+  it("adds memories with app metadata and recalls this app's decisions, newest first", async () => {
     const bb = fakeBackboard([]);
     const memory = createBackboardMemory({ client: bb.client, appId: app.id });
     await memory.remember("The developer undid v2.", { kind: "undone" });
-    expect(await memory.recall("undone changes", 5)).toEqual([{ content: "remembered", score: 0.7 }]);
+    expect(await memory.recall(5)).toEqual([
+      { content: "newer", createdAt: "2026-09-19T11:00:00" },
+      { content: "older", createdAt: "2026-09-19T10:00:00" },
+    ]);
+    expect(await memory.recall(1)).toHaveLength(1);
     const add = bb.calls.find((c) => c.path === "/assistants/asst-new/memories")!;
     expect(add.body).toEqual({ content: "The developer undid v2.", metadata: { app: "fixture", kind: "undone" } });
-    const search = bb.calls.find((c) => c.path.endsWith("/memories/search"))!;
-    expect(search.body).toEqual({ query: "undone changes", limit: 5 });
   });
 });

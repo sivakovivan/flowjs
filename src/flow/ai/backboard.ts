@@ -84,12 +84,10 @@ export function createBackboardClient(options: { apiKey: string; baseUrl?: strin
     sendMessage: (body: Record<string, unknown>) => request<MessageResponse>("POST", "/threads/messages", body),
     addMemory: (assistantId: string, content: string, metadata: Record<string, unknown>) =>
       request<{ memory_id: string }>("POST", `/assistants/${assistantId}/memories`, { content, metadata }),
-    searchMemories: (assistantId: string, query: string, limit: number) =>
-      request<{ memories: Array<{ id: string; content: string; score: number | null }> }>(
-        "POST",
-        `/assistants/${assistantId}/memories/search`,
-        { query, limit },
-      ),
+    listMemories: (assistantId: string) =>
+      request<{
+        memories: Array<{ id: string; content: string; metadata: Record<string, unknown> | null; created_at: string | null }>;
+      }>("GET", `/assistants/${assistantId}/memories?page=1&page_size=100`),
     resetMemories: (assistantId: string) => request<{ success: boolean }>("DELETE", `/assistants/${assistantId}/memories`),
     deleteAssistant: (assistantId: string) => request<unknown>("DELETE", `/assistants/${assistantId}`),
   };
@@ -251,9 +249,15 @@ export function createBackboardMemory(options: { client: BackboardClient; appId:
     async remember(content, metadata) {
       await client.addMemory(await assistant(), content, { app: appId, ...metadata });
     },
-    async recall(query, limit): Promise<RecalledMemory[]> {
-      const { memories } = await client.searchMemories(await assistant(), query, limit);
-      return memories.map((m) => ({ content: m.content, score: m.score }));
+    // Listing, not semantic search: the decision log is small, and BackBoard's search applies a
+    // relevance cutoff that silently dropped decisions for some queries when measured live.
+    async recall(limit): Promise<RecalledMemory[]> {
+      const { memories } = await client.listMemories(await assistant());
+      return memories
+        .filter((m) => m.metadata?.app === appId)
+        .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
+        .slice(0, limit)
+        .map((m) => ({ content: m.content, createdAt: m.created_at }));
     },
     async reset() {
       await client.resetMemories(await assistant());

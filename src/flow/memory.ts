@@ -9,17 +9,17 @@ import type { VersionRecord } from "./store";
 
 export interface RecalledMemory {
   content: string;
-  score: number | null;
+  createdAt: string | null;
 }
 
 export interface FlowMemory {
   remember(content: string, metadata: Record<string, unknown>): Promise<void>;
-  recall(query: string, limit: number): Promise<RecalledMemory[]>;
+  /** The most recent decisions for this application, newest first. */
+  recall(limit: number): Promise<RecalledMemory[]>;
   reset(): Promise<void>;
 }
 
-export const RECALL_LIMIT = 5;
-export const RECALL_QUERY = "earlier interface changes that were applied, undone or restored";
+export const RECALL_LIMIT = 6;
 
 function describeMutations(mutations: Mutation[]): string {
   return mutations

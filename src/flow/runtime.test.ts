@@ -102,7 +102,7 @@ describe("generate", () => {
   });
 
   it("uses recordings without an API key or when recorded mode is forced", async () => {
-    expect((await runtime(null).generate()).provenance?.fallbackReason).toMatch(/OPENAI_API_KEY/);
+    expect((await runtime(null).generate()).provenance?.fallbackReason).toMatch(/No AI key is configured/);
     store = new FlowStore(":memory:");
     let liveCalled = false;
     const live = stub({ generateSchema: async () => ((liveCalled = true), structuredClone(generation)) });
@@ -359,7 +359,7 @@ describe("decision memory", () => {
     const remembered: Array<{ content: string; metadata: Record<string, unknown> }> = [];
     const memory: FlowMemory = {
       remember: async (content, metadata) => void remembered.push({ content, metadata }),
-      recall: async () => remembered.map((m) => ({ content: m.content, score: 1 })),
+      recall: async () => remembered.map((m) => ({ content: m.content, createdAt: null })),
       reset: async () => void remembered.splice(0),
       ...overrides,
     };

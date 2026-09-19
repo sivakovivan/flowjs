@@ -3,7 +3,7 @@ import { GeneratedSchemaOutput, OptimizationOutput, toMutation, toUISchema } fro
 import { ProviderOutput, type CallMeta, type FlowAIProvider, type OutputCheck } from "./ai/providers";
 import { findFriction, type Finding } from "./friction";
 import { computeMetrics, type Metrics } from "./metrics";
-import { decisionMemory, RECALL_LIMIT, RECALL_QUERY, type FlowMemory, type RecalledMemory } from "./memory";
+import { decisionMemory, RECALL_LIMIT, type FlowMemory, type RecalledMemory } from "./memory";
 import { applyMutations, type Mutation } from "./mutations";
 import { seedSessions } from "./seed";
 import type { FlowApp } from "./registry";
@@ -105,7 +105,7 @@ export function createRuntime(deps: {
       raw instanceof ProviderOutput ? { output: raw.output, meta: raw.meta } : { output: raw, meta: null };
     let fallbackReason: string | null = null;
     if (deps.forceRecorded) fallbackReason = "Recorded mode is enabled (FLOW_AI_MODE=recorded).";
-    else if (!live) fallbackReason = "OPENAI_API_KEY is not configured.";
+    else if (!live) fallbackReason = "No AI key is configured (BACKBOARD_API_KEY or OPENAI_API_KEY).";
     else {
       try {
         const { output, meta } = unwrap(await call(live, repairCheck));
@@ -139,7 +139,7 @@ export function createRuntime(deps: {
   async function recall(): Promise<RecalledMemory[]> {
     if (!memory) return [];
     try {
-      return await memory.recall(RECALL_QUERY, RECALL_LIMIT);
+      return await memory.recall(RECALL_LIMIT);
     } catch {
       return [];
     }

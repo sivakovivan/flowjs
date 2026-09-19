@@ -26,7 +26,7 @@ import { GeneratePrompt } from './GeneratePrompt';
 import { HistoryMenu } from './HistoryMenu';
 import { SourceBadge } from './SourceBadge';
 import { TelemetryPanel } from './TelemetryPanel';
-import { CustomizationChat } from './CustomizationChat';
+import { FlowMenu } from './FlowMenu';
 
 type Tab = 'evidence' | 'telemetry' | 'capabilities';
 
@@ -521,77 +521,7 @@ export function FlowStudio({
                 )}
 
                 {active && !developerMode && (
-                    <div className="user-tools" ref={userToolsRef}>
-                        <CustomizationChat
-                            generating={generating}
-                            onCustomize={async (prompt) => {
-                                setGenerating(true);
-                                try {
-                                    await api.generate(prompt);
-                                    await refreshState();
-                                    notify(
-                                        'ok',
-                                        'Your request created a new dashboard version.'
-                                    );
-                                } catch (error) {
-                                    notify(
-                                        'error',
-                                        error instanceof Error
-                                            ? error.message
-                                            : 'Could not customize the dashboard.'
-                                    );
-                                } finally {
-                                    setGenerating(false);
-                                }
-                            }}
-                        />
-                        <div className="history-anchor">
-                            <button
-                                type="button"
-                                className="operations-button"
-                                aria-expanded={operationsOpen}
-                                onClick={() =>
-                                    setOperationsOpen((open) => !open)
-                                }
-                            >
-                                Operations
-                            </button>
-                            {operationsOpen && (
-                                <div
-                                    className="operations-menu"
-                                    role="menu"
-                                    aria-label="Dashboard operations"
-                                >
-                                    <button
-                                        type="button"
-                                        role="menuitem"
-                                        onClick={undo}
-                                        disabled={!active.parentVersionId}
-                                    >
-                                        ↶ Undo
-                                    </button>
-                                    <button
-                                        type="button"
-                                        role="menuitem"
-                                        onClick={() => {
-                                            setOperationsOpen(false);
-                                            setHistoryOpen(true);
-                                        }}
-                                    >
-                                        Version history
-                                    </button>
-                                </div>
-                            )}
-                            {historyOpen && (
-                                <HistoryMenu
-                                    versions={studio.versions}
-                                    activeId={active.id}
-                                    onRestore={restore}
-                                    onClose={() => setHistoryOpen(false)}
-                                />
-                            )}
-                        </div>
-                    </div>
+                    <FlowMenu studio={studio} onVersion={transitionTo} />
                 )}
 
                 <div className="notices" aria-live="polite">

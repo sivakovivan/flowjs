@@ -2,7 +2,7 @@
   "name": "flowjs",
   "version": "0.1.0",
   "private": true,
-  "description": "flow.js — an adaptive interface runtime that turns application capabilities into continuously evolving user interfaces.",
+  "description": "flow.js \u2014 an adaptive interface runtime that turns application capabilities into continuously evolving user interfaces.",
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:reset": "node scripts/db-reset.mjs"
+    "db:reset": "node scripts/db-reset.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.75.0",
@@ -27,6 +28,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^24.13.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

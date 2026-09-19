@@ -13,3 +13,7 @@ next-env.d.ts
 .env*.local
 
 .DS_Store
+
+# playwright
+test-results/
+playwright-report/

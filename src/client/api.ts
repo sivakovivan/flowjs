@@ -5,6 +5,7 @@ import type {
 import type { Finding } from '@flowjs/core/flow/friction';
 import type { Metrics } from '@flowjs/core/flow/metrics';
 import type { Primitive } from '@flowjs/core/flow/primitives';
+import type { LayoutTracks } from '@flowjs/core/flow/layout-tracks';
 import type {
     CapabilityDescriptor,
     StateValues,
@@ -31,6 +32,8 @@ export interface StudioState {
     graph: Array<{ from: string; to: string }>;
     defaultState: StateValues;
     active: VersionRecord | null;
+    /** Scaffold for aggregate and per-user layout tracks. */
+    layouts: LayoutTracks;
     versions: VersionSummary[];
     ai: {
         liveConfigured: boolean;

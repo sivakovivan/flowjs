@@ -27,6 +27,7 @@ import { HistoryMenu } from './HistoryMenu';
 import { SourceBadge } from './SourceBadge';
 import { TelemetryPanel } from './TelemetryPanel';
 import { CustomizationChat } from './CustomizationChat';
+import type { LayoutTrack } from '@flowjs/core/flow/layout-tracks';
 
 type Tab = 'evidence' | 'telemetry' | 'capabilities';
 
@@ -68,6 +69,7 @@ export function FlowStudio({
     const [operationsOpen, setOperationsOpen] = useState(false);
     const [rate, setRate] = useState(0.5);
     const [busy, setBusy] = useState(false);
+    const [layoutTrack, setLayoutTrack] = useState<LayoutTrack>('average');
     const [notices, setNotices] = useState<Notice[]>([]);
     const noticeId = useRef(0);
     const userToolsRef = useRef<HTMLDivElement>(null);
@@ -99,6 +101,7 @@ export function FlowStudio({
     const refreshState = useCallback(async () => {
         const next = await api.state();
         setStudio(next);
+        setLayoutTrack(next.layouts.selected);
         setRate(next.application.mutationRate);
         return next;
     }, []);
@@ -116,6 +119,10 @@ export function FlowStudio({
     }, [refreshState]);
 
     const activeId = studio?.active?.id ?? null;
+    const displayedVersion =
+        layoutTrack === 'personal'
+            ? (studio?.layouts.personal ?? studio?.layouts.average)
+            : studio?.layouts.average;
     useEffect(() => {
         if (!activeId) return;
         refreshMetrics();
@@ -406,7 +413,7 @@ export function FlowStudio({
                     )}
                 </header>
 
-                {!active ? (
+                {!displayedVersion ? (
                     <GeneratePrompt
                         studio={studio}
                         generating={generating}
@@ -422,9 +429,44 @@ export function FlowStudio({
                         >
                             <div className="stage__meta">
                                 <p>
-                                    Generated interface, {active.id}:{' '}
-                                    {active.reason}
+                                    {layoutTrack === 'average'
+                                        ? 'Average layout'
+                                        : 'Personal layout'}{' '}
+                                    · {displayedVersion.id}:{' '}
+                                    {displayedVersion.reason}
                                 </p>
+                                <div
+                                    className="layout-track-toggle"
+                                    role="group"
+                                    aria-label="Layout version"
+                                >
+                                    <button
+                                        type="button"
+                                        className={
+                                            layoutTrack === 'average'
+                                                ? 'is-active'
+                                                : undefined
+                                        }
+                                        onClick={() =>
+                                            setLayoutTrack('average')
+                                        }
+                                    >
+                                        Average
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={
+                                            layoutTrack === 'personal'
+                                                ? 'is-active'
+                                                : undefined
+                                        }
+                                        onClick={() =>
+                                            setLayoutTrack('personal')
+                                        }
+                                    >
+                                        My layout
+                                    </button>
+                                </div>
                                 {generatedProvenance &&
                                     active.source === 'generated' && (
                                         <SourceBadge
@@ -437,13 +479,13 @@ export function FlowStudio({
                                     )}
                             </div>
                             <RendererProvider
-                                versionId={active.id}
+                                versionId={displayedVersion.id}
                                 capabilities={studio.capabilities}
                                 initialState={studio.defaultState}
                                 notify={notify}
                             >
                                 <Dashboard
-                                    schema={active.schema}
+                                    schema={displayedVersion.schema}
                                     changes={changes}
                                 />
                             </RendererProvider>

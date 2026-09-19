@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { compatiblePrimitives } from '@flowjs/core/flow/primitives';
 import { aiMode, getRuntime, handle, sentryEnabled } from '@/server/flow';
 
-/** Everything the client needs to render: capabilities, active version, history. */
+/** Everything the client needs to render: capabilities, tracks, active version, history. */
 export async function GET() {
     return handle(async () => {
         const runtime = getRuntime();

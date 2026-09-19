@@ -1,3 +1,5 @@
+import { FlowStudio } from "@/components/studio/FlowStudio";
+
 export default function Home() {
-  return <main>flow.js</main>;
+  return <FlowStudio />;
 }

@@ -11,7 +11,11 @@ import type { Finding } from '@flowjs/core/flow/friction';
 import { computeMetrics } from '@flowjs/core/flow/metrics';
 import { parseDataOutput } from '@flowjs/core/flow/data-contracts';
 import { applyMutations } from '@flowjs/core/flow/mutations';
-import { layoutRows, validateSchema, type UISchema } from '@flowjs/core/flow/schema';
+import {
+    layoutRows,
+    validateSchema,
+    type UISchema,
+} from '@flowjs/core/flow/schema';
 import { salesRecording } from './recordings';
 import { salesApp } from './sales-app';
 

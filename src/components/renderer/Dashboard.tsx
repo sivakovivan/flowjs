@@ -6,7 +6,11 @@ import type { ClientCapability } from '@flowjs/core/client/api';
 import { tracker } from '@flowjs/core/client/telemetry';
 import type { ComponentMetrics } from '@flowjs/core/flow/metrics';
 import { SIZE_SPAN } from '@flowjs/core/flow/primitives';
-import type { ComponentChange, UIComponent, UISchema } from '@flowjs/core/flow/schema';
+import type {
+    ComponentChange,
+    UIComponent,
+    UISchema,
+} from '@flowjs/core/flow/schema';
 import { useRenderer } from './context';
 import { Primitive } from './primitives';
 

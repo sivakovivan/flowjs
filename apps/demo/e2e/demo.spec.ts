@@ -39,8 +39,7 @@ test('capabilities in, adaptive interface out', async ({ page }) => {
             .click();
     }
     const exported = page.waitForResponse(
-        (response) =>
-            response.url().endsWith('/api/flow/actions/exportReport'),
+        (response) => response.url().endsWith('/api/flow/actions/exportReport'),
         { timeout: 60_000 }
     );
     await page.getByRole('button', { name: 'Export CSV' }).click();

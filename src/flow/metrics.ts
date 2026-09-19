@@ -35,6 +35,8 @@ export interface ComponentMetrics {
   /** How long after load the component first scrolled into view. */
   avgFirstViewMs: number | null;
   repeatRate: number;
+  /** Median backend latency of this component's calls in sessions where it was retried. */
+  retryLatencyMs: number | null;
   valueChangesPerUsingSession: number | null;
   completions: number;
   errors: number;
@@ -163,12 +165,20 @@ export function computeMetrics(input: {
     const firstViewTimes = [...firstView.values()];
 
     let repeats = 0;
+    const retriedSessions = new Set<string>();
     const lastInteraction = new Map<string, number>();
     for (const event of ownInteractions) {
       const last = lastInteraction.get(event.sessionId);
-      if (last !== undefined && event.createdAt - last <= REPEAT_WINDOW_MS) repeats += 1;
+      if (last !== undefined && event.createdAt - last <= REPEAT_WINDOW_MS) {
+        repeats += 1;
+        retriedSessions.add(event.sessionId);
+      }
       lastInteraction.set(event.sessionId, event.createdAt);
     }
+    const retryLatencies = input.calls
+      .filter((c) => c.componentId === component.id && c.sessionId !== null && retriedSessions.has(c.sessionId))
+      .map((c) => c.latencyMs)
+      .sort((a, b) => a - b);
 
     const valueChanges = ownInteractions.filter((e) => e.eventType === "value_change").length;
     const completions = own.filter((e) => e.eventType === "interaction_complete").length;
@@ -190,6 +200,7 @@ export function computeMetrics(input: {
       avgDiscoveryMs: discoveryTimes.length ? Math.round(average(discoveryTimes)) : null,
       avgFirstViewMs: firstViewTimes.length ? Math.round(average(firstViewTimes)) : null,
       repeatRate: ownInteractions.length ? round(repeats / ownInteractions.length) : 0,
+      retryLatencyMs: retryLatencies.length ? round(percentile(retryLatencies, 0.5), 1) : null,
       valueChangesPerUsingSession: usingSessions.size ? round(valueChanges / usingSessions.size, 2) : null,
       completions,
       errors,

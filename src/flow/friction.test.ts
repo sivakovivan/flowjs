@@ -51,6 +51,16 @@ describe("findFriction", () => {
     expect(finding.evidence.join()).toMatch(/Sentry traces: abc/);
   });
 
+  it("uses latency from the retrying sessions, not the global median", () => {
+    const calls = [
+      call("exportReport", 2900, { sessionId: "s", componentId: "export", traceId: "slow-trace" }),
+      ...Array.from({ length: 5 }, () => call("exportReport", 100, { sessionId: "other", componentId: "export" })),
+    ];
+    const finding = findingsFor(exportRetries(), calls).find((f) => f.kind === "high-retry-action")!;
+    expect(finding.classification).toBe("performance");
+    expect(finding.evidence.join()).toMatch(/median 2900ms in sessions that retried/);
+  });
+
   it("classifies retries on a fast action as interface friction", () => {
     const fast = [call("exportReport", 120), call("exportReport", 140)];
     const finding = findingsFor(exportRetries(), fast).find((f) => f.kind === "high-retry-action")!;

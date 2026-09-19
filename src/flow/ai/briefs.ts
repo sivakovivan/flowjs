@@ -63,6 +63,7 @@ export function optimizationBrief(input: {
       avgDiscoveryMs: m.avgDiscoveryMs,
       avgFirstViewMs: m.avgFirstViewMs,
       repeatRate: m.repeatRate,
+      retryLatencyMs: m.retryLatencyMs,
       valueChangesPerUsingSession: m.valueChangesPerUsingSession,
       errorRate: m.errorRate,
       followedBy: m.followedBy.slice(0, 3),

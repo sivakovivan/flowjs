@@ -1,4 +1,4 @@
-import type { ComponentMetrics, LatencyMetrics, Metrics } from "./metrics";
+import { SLOW_LATENCY_MS, type ComponentMetrics, type LatencyMetrics, type Metrics } from "./metrics";
 import type { FlowApp } from "./registry";
 import { layoutRows, type UISchema } from "./schema";
 
@@ -137,7 +137,8 @@ export function findFriction(input: { app: FlowApp; schema: UISchema; metrics: M
       m.interactions >= HEURISTICS.retry.minInteractions &&
       m.repeatRate >= HEURISTICS.retry.minRepeatRate
     ) {
-      const slow = latency?.slow ?? false;
+      // Prefer latency observed in the sessions that retried: a fast global median can hide it.
+      const slow = m.retryLatencyMs !== null ? m.retryLatencyMs >= SLOW_LATENCY_MS : (latency?.slow ?? false);
       findings.push({
         kind: "high-retry-action",
         componentIds: [m.componentId],
@@ -148,6 +149,7 @@ export function findFriction(input: { app: FlowApp; schema: UISchema; metrics: M
           : `${label(m)} is retried although the backend is fast`,
         evidence: [
           `${m.interactions} clicks, repeated within 30s: ${pct(m.repeatRate)}`,
+          ...(m.retryLatencyMs !== null ? [`backend median ${Math.round(m.retryLatencyMs)}ms in sessions that retried`] : []),
           describeLatency(latency),
           ...(latency?.traceIds.length ? [`Sentry traces: ${latency.traceIds.join(", ")}`] : []),
         ],

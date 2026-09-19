@@ -52,6 +52,34 @@ describe("computeMetrics", () => {
   });
 });
 
+describe("retry latency", () => {
+  it("measures backend latency only in sessions where the component was retried", () => {
+    const retried = session("slow", [
+      ["export", "component_click", 1],
+      ["export", "component_click", 3],
+      ["export", "component_click", 5],
+    ]);
+    const once = session("fast", [["export", "component_click", 1]], { start: 5_000_000 });
+    const calls = [
+      call("exportReport", 2800, { sessionId: "slow", componentId: "export" }),
+      call("exportReport", 90, { sessionId: "fast", componentId: "export" }),
+      call("exportReport", 110, { sessionId: "fast", componentId: "export" }),
+      call("exportReport", 95, { sessionId: "other", componentId: "export" }),
+    ];
+    const exportMetrics = metricsFor([...retried, ...once], calls).components.find((c) => c.componentId === "export")!;
+    expect(exportMetrics.retryLatencyMs).toBe(2800);
+    // Across all calls the backend looks fast.
+    expect(computeLatency(calls).find((l) => l.capabilityId === "exportReport")?.slow).toBe(false);
+  });
+
+  it("is null when nothing was retried", () => {
+    const exportMetrics = metricsFor(session("s", [["export", "component_click", 1]])).components.find(
+      (c) => c.componentId === "export",
+    )!;
+    expect(exportMetrics.retryLatencyMs).toBeNull();
+  });
+});
+
 describe("computeLatency", () => {
   it("summarizes backend latency and flags slow capabilities", () => {
     const latency = computeLatency([

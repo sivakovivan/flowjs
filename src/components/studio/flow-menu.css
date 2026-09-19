@@ -9,15 +9,13 @@
     font-size: 14px;
     letter-spacing: -0.015em;
     --glass-body: #f2f2f7;
-    --glass-tint: #f2f2f7d9;
+    --glass-tint: #ffffff12;
     --glass-input: #ffffff80;
 }
 .flow-glass {
     background:
-        linear-gradient(155deg, #ffffff80, #ffffff00 35% 70%, #ffffff45),
+        linear-gradient(155deg, #ffffff38, #ffffff00 35% 70%, #ffffff18),
         var(--glass-tint);
-    backdrop-filter: blur(20px) saturate(1.8);
-    -webkit-backdrop-filter: blur(20px) saturate(1.8);
     border: 1px solid #ffffffa6;
     box-shadow:
         inset 0 1px 1px #ffffffed,
@@ -27,6 +25,7 @@
         0 2px 6px #22243b12;
 }
 .flow-menu__launcher {
+    position: relative;
     width: 56px;
     height: 56px;
     border-radius: 50%;
@@ -35,6 +34,33 @@
     color: #0065d5;
     cursor: pointer;
     transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1.3);
+}
+/* rdev/liquid-glass-react supplies the displacement filter and optical rims.
+   Keep it decorative and override its demo positioning/Tailwind assumptions. */
+.flow-menu__material {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+}
+.flow-menu__material > div:not(.flow-menu__lens) {
+    display: none;
+}
+.flow-menu__material > span,
+.flow-menu__lens {
+    position: absolute !important;
+    inset: 0 !important;
+    transform: none !important;
+}
+.flow-menu__lens > div {
+    width: 100%;
+    height: 100%;
+    box-shadow: none !important;
+}
+.flow-menu__panel > :not(.flow-menu__material),
+.flow-menu__launcher > svg {
+    position: relative;
+    z-index: 1;
 }
 .flow-menu__launcher:hover {
     transform: scale(1.06);
@@ -207,18 +233,16 @@
 @keyframes flow-menu-enter {
     from {
         opacity: 0;
-        transform: translateY(8px) scale(0.95);
     }
     to {
         opacity: 1;
-        transform: none;
     }
 }
 @media (prefers-color-scheme: dark) {
     .flow-menu {
         color: #f0f5ff;
         --glass-body: #242426;
-        --glass-tint: #242426e6;
+        --glass-tint: #00000018;
         --glass-input: #ffffff0d;
     }
     .flow-glass {

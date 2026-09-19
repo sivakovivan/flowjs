@@ -2,6 +2,7 @@
 import './flow-menu.css';
 
 import { useEffect, useRef, useState } from 'react';
+import { MenuGlass } from './MenuGlass';
 import {
     api,
     type StudioState,
@@ -143,6 +144,7 @@ export function FlowMenu({
                     aria-label="flow.js dashboard controls"
                     aria-busy={busy}
                 >
+                    <MenuGlass key={view} />
                     <header>
                         <button
                             className="flow-menu__back"
@@ -269,6 +271,7 @@ export function FlowMenu({
                 aria-haspopup="dialog"
                 onClick={() => (view ? close() : setView('actions'))}
             >
+                <MenuGlass circle />
                 <svg
                     width="26"
                     height="26"

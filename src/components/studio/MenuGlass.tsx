@@ -26,17 +26,20 @@ export function MenuGlass({ circle = false }: { circle?: boolean }) {
                         inset: 0,
                         width: '100%',
                         height: '100%',
+                        background: 'transparent',
+                        boxShadow: 'none',
                     }}
                     radius={circle ? 999 : 28}
                     optics={{
-                        depth: circle ? 0.82 : 0.64,
-                        curvature: circle ? 0.3 : 0.2,
-                        dispersion: 0.22,
-                        strength: circle ? 0.28 : 0.18,
-                        frost: 1.5,
-                        specular: 0.8,
-                        sheen: 0.7,
-                        glow: 0.35,
+                        depth: circle ? 0.56 : 0.42,
+                        curvature: circle ? 0.18 : 0.12,
+                        dispersion: 0.16,
+                        strength: circle ? 0.2 : 0.12,
+                        frost: 0.35,
+                        brightness: 0,
+                        specular: 0.58,
+                        sheen: 0.42,
+                        glow: 0.18,
                     }}
                 >
                     <span />

@@ -63,23 +63,27 @@ export function createBackboardClient(options: { apiKey: string; baseUrl?: strin
     return (text ? JSON.parse(text) : null) as T;
   }
 
-  let assistant: Promise<string> | null = null;
+  const assistants = new Map<string, Promise<string>>();
 
   return {
-    /** Find or create the assistant that owns this application's threads and memory. */
+    /** Find or create the assistant that owns an application's threads and memory. */
     assistantId(name: string, systemPrompt: string): Promise<string> {
-      assistant ??= (async () => {
-        const existing = await request<Array<{ name: string; assistant_id: string }>>("GET", "/assistants");
-        const match = existing.find((a) => a.name === name);
-        if (match) return match.assistant_id;
-        const created = await request<{ assistant_id: string }>("POST", "/assistants", {
-          name,
-          system_prompt: systemPrompt,
-        });
-        return created.assistant_id;
-      })();
-      assistant.catch(() => (assistant = null));
-      return assistant;
+      let pending = assistants.get(name);
+      if (!pending) {
+        pending = (async () => {
+          const existing = await request<Array<{ name: string; assistant_id: string }>>("GET", "/assistants");
+          const match = existing.find((a) => a.name === name);
+          if (match) return match.assistant_id;
+          const created = await request<{ assistant_id: string }>("POST", "/assistants", {
+            name,
+            system_prompt: systemPrompt,
+          });
+          return created.assistant_id;
+        })();
+        pending.catch(() => assistants.delete(name));
+        assistants.set(name, pending);
+      }
+      return pending;
     },
     sendMessage: (body: Record<string, unknown>) => request<MessageResponse>("POST", "/threads/messages", body),
     addMemory: (assistantId: string, content: string, metadata: Record<string, unknown>) =>

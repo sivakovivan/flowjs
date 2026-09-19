@@ -103,6 +103,12 @@ describe("structured output over BackBoard", () => {
     expect(bb.calls.filter((c) => c.path === "/assistants" && c.method === "POST")).toHaveLength(0);
   });
 
+  it("resolves assistants per name", async () => {
+    const bb = fakeBackboard([], [{ name: "flowjs-a", assistant_id: "asst-a" }]);
+    expect(await bb.client.assistantId("flowjs-a", "p")).toBe("asst-a");
+    expect(await bb.client.assistantId("flowjs-b", "p")).toBe("asst-new");
+  });
+
   it("accepts JSON wrapped in a code fence", async () => {
     const bb = fakeBackboard(["```json\n" + JSON.stringify(valid) + "\n```"]);
     expect((await generate(bb)).output).toEqual(valid);

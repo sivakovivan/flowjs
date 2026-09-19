@@ -1185,6 +1185,10 @@ pre {
 }
 
 @media (max-width: 760px) {
+  .bar {
+    position: static;
+  }
+
   .bar,
   .workspace {
     padding-left: 16px;

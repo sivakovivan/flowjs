@@ -380,6 +380,7 @@ pre {
 /* ── workspace ───────────────────────────────────────────────────────────── */
 
 .workspace {
+    min-height: calc(100vh - 62px);
     display: grid;
     grid-template-columns: minmax(0, 1fr) 400px;
     gap: 16px;
@@ -388,6 +389,7 @@ pre {
 }
 
 .stage {
+    min-height: calc(100vh - 118px);
     padding: calc(var(--app-space) * 2);
     border-radius: 6px;
     background: var(--app-bg);
@@ -395,6 +397,29 @@ pre {
     font-family: var(--app-font);
     font-size: 14px;
     box-shadow: 0 0 0 1px var(--rule);
+}
+
+@media (min-width: 1101px) {
+    .workspace {
+        grid-template-columns: minmax(0, 1fr) 360px;
+        padding: 0 0 40px;
+        gap: 0;
+    }
+
+    .stage {
+        min-height: calc(100vh - 62px);
+        padding: clamp(24px, 4vw, 64px);
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    .panel {
+        min-height: calc(100vh - 62px);
+        border-top: 0;
+        border-right: 0;
+        border-bottom: 0;
+        border-radius: 0;
+    }
 }
 
 .stage__meta {

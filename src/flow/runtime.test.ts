@@ -3,7 +3,7 @@ import { fixtureApp } from "./__fixtures__/app";
 import { fixtureSchema } from "./__fixtures__/schema";
 import { dateRangeFriction } from "./__fixtures__/telemetry";
 import type { GeneratedSchemaOutput, OptimizationOutput } from "./ai/contracts";
-import { createRecordedProvider, type FlowAIProvider, type Recording } from "./ai/providers";
+import { createBackboardProvider, createRecordedProvider, type FlowAIProvider, type Recording } from "./ai/providers";
 import { createRuntime, RuntimeError, type OptimizationAnalysis } from "./runtime";
 import { FlowStore } from "./store";
 
@@ -224,6 +224,63 @@ describe("optimize and apply", () => {
     expect(run.aiSource).toBe("recorded");
     expect((run.analysis as OptimizationAnalysis).ai.fallbackReason).toMatch(/timeout/);
     expect(run.status).not.toBe("rejected");
+  });
+
+  it("unwraps Backboard response envelopes before validating structured output", async () => {
+    const originalFetch = global.fetch;
+    const originalApiKey = process.env.BACKBOARD_API_KEY;
+    process.env.BACKBOARD_API_KEY = "test-backboard-key";
+    global.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        content: {
+          output: {
+            finding: "Date filter is buried in the dashboard.",
+            classification: "ui",
+            evidence: ["used in 100% of sessions"],
+            confidence: 0.8,
+            expectedBenefit: 0.4,
+            reason: "Promote date control beside revenue",
+            explanation: "Move the date range next to the chart it filters to reduce friction.",
+            mutations: [{ type: "MOVE", element: "date-range", target: "revenue-chart", position: "before", index: null, size: null, variant: null }],
+          },
+        },
+      }),
+    }) as typeof fetch;
+
+    try {
+      const provider = createBackboardProvider();
+      const brief = {
+        application: { id: app.id, name: app.name, context: app.context },
+        capabilities: app.capabilities,
+        dependencies: app.graph.edges,
+        theme: app.theme,
+        grid: { columns: 12, sizes: { small: 3, medium: 6, large: 9, full: 12 } },
+        currentSchema: fixtureSchema().components.map((c) => ({ ...c, row: 0 })),
+        sampleSize: { sessions: 1, liveSessions: 1, seededSessions: 0, interactions: 1 },
+        componentMetrics: [],
+        topSequences: [],
+        backendLatency: [],
+        heuristicFindings: [{
+          kind: "buried-control",
+          classification: "ui",
+          severity: 0.8,
+          componentIds: ["date-range"],
+          finding: "Date filter is buried in the dashboard.",
+          evidence: ["used in 100% of sessions"],
+          confidence: 0.8,
+          expectedBenefit: 0.4,
+          reason: "Promote date control beside revenue",
+          explanation: "Move the date range next to the chart it filters to reduce friction.",
+        }],
+      } as any;
+      const output = await provider.proposeOptimization(brief);
+      expect(output).toMatchObject({ classification: "ui", mutations: expect.any(Array) });
+    } finally {
+      global.fetch = originalFetch;
+      if (originalApiKey === undefined) delete process.env.BACKBOARD_API_KEY;
+      else process.env.BACKBOARD_API_KEY = originalApiKey;
+    }
   });
 
   it("marks a proposal stale when the dashboard changed underneath it", async () => {

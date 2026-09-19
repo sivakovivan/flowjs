@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { salesRecording } from "@/demo/recordings";
 import { salesApp } from "@/demo/sales-app";
-import { createOpenAIProvider, createRecordedProvider } from "@/flow/ai/providers";
+import { createConfiguredAIProvider, createRecordedProvider } from "@/flow/ai/providers";
 import { CapabilityInputError } from "@/flow/registry";
 import { createRuntime, RuntimeError, type FlowRuntime } from "@/flow/runtime";
 import { FlowStore } from "@/flow/store";
@@ -15,20 +15,23 @@ import { FlowStore } from "@/flow/store";
 
 const globalForFlow = globalThis as unknown as { flowRuntime?: FlowRuntime };
 
-export const aiMode = () => ({
-  liveConfigured: Boolean(process.env.OPENAI_API_KEY),
+export const aiMode = () => {
+  const provider = (process.env.AI_PROVIDER ?? "openai").toLowerCase();
+  return {
+  liveConfigured: provider === "backboard" ? Boolean(process.env.BACKBOARD_API_KEY) : Boolean(process.env.OPENAI_API_KEY),
   forcedRecorded: process.env.FLOW_AI_MODE === "recorded",
-  model: process.env.OPENAI_MODEL || null,
-});
+  model: provider === "backboard" ? process.env.BACKBOARD_MODEL || null : process.env.OPENAI_MODEL || null,
+  };
+};
 
 export function getRuntime(): FlowRuntime {
   if (!globalForFlow.flowRuntime) {
     const store = new FlowStore(process.env.FLOW_DB_PATH || ".flow/flow.db");
-    const apiKey = process.env.OPENAI_API_KEY;
+    const live = createConfiguredAIProvider();
     globalForFlow.flowRuntime = createRuntime({
       app: salesApp,
       store,
-      live: apiKey ? createOpenAIProvider({ apiKey, model: process.env.OPENAI_MODEL || undefined }) : null,
+      live,
       recorded: createRecordedProvider(salesApp, salesRecording),
       forceRecorded: process.env.FLOW_AI_MODE === "recorded",
     });

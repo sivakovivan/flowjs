@@ -47,7 +47,11 @@ function themeStyle(theme: StudioState['application']['theme']): CSSProperties {
     } as CSSProperties;
 }
 
-export function FlowStudio({ developerMode = false }: { developerMode?: boolean }) {
+export function FlowStudio({
+    developerMode = false,
+}: {
+    developerMode?: boolean;
+}) {
     const [studio, setStudio] = useState<StudioState | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [generating, setGenerating] = useState(false);
@@ -62,6 +66,7 @@ export function FlowStudio({ developerMode = false }: { developerMode?: boolean 
     );
     const [tab, setTab] = useState<Tab>('telemetry');
     const [historyOpen, setHistoryOpen] = useState(false);
+    const [operationsOpen, setOperationsOpen] = useState(false);
     const [showTelemetry, setShowTelemetry] = useState(true);
     const [rate, setRate] = useState(0.5);
     const [busy, setBusy] = useState(false);
@@ -451,87 +456,127 @@ export function FlowStudio({ developerMode = false }: { developerMode?: boolean 
                             </RendererProvider>
                         </section>
 
-                        {developerMode && <aside className="panel" aria-label="flow.js developer console">
-                            <div className="tabs" role="tablist">
-                                {(
-                                    [
-                                        'telemetry',
-                                        'evidence',
-                                        'capabilities',
-                                    ] as const
-                                ).map((name) => (
-                                    <button
-                                        key={name}
-                                        type="button"
-                                        role="tab"
-                                        aria-selected={tab === name}
-                                        className={
-                                            tab === name
-                                                ? 'is-active'
-                                                : undefined
-                                        }
-                                        onClick={() => setTab(name)}
-                                    >
-                                        {name === 'telemetry'
-                                            ? 'Telemetry'
-                                            : name === 'evidence'
-                                              ? 'Optimization'
-                                              : 'Capabilities'}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="panel__body" role="tabpanel">
-                                {tab === 'telemetry' && (
-                                    <TelemetryPanel
-                                        data={metrics}
-                                        onSeed={seed}
-                                        onClearSeeded={clearSeeded}
-                                        busy={busy}
-                                    />
-                                )}
-                                {tab === 'evidence' && (
-                                    <EvidencePanel
-                                        run={run}
-                                        optimizing={optimizing}
-                                        countdown={countdown}
-                                        applying={applying}
-                                        sentryOrg={studio.sentry.org}
-                                        onApply={() =>
-                                            run && apply(run, 'manual')
-                                        }
-                                        onCancelAuto={() => setCountdown(null)}
-                                    />
-                                )}
-                                {tab === 'capabilities' && (
-                                    <CapabilitiesPanel studio={studio} />
-                                )}
-                            </div>
-                            <p className="panel__foot">
-                                {studio.sentry.enabled
-                                    ? 'Sentry tracing and replay are on.'
-                                    : 'Sentry is off (no DSN); latency is still measured locally.'}
-                            </p>
-                        </aside>}
+                        {developerMode && (
+                            <aside
+                                className="panel"
+                                aria-label="flow.js developer console"
+                            >
+                                <div className="tabs" role="tablist">
+                                    {(
+                                        [
+                                            'telemetry',
+                                            'evidence',
+                                            'capabilities',
+                                        ] as const
+                                    ).map((name) => (
+                                        <button
+                                            key={name}
+                                            type="button"
+                                            role="tab"
+                                            aria-selected={tab === name}
+                                            className={
+                                                tab === name
+                                                    ? 'is-active'
+                                                    : undefined
+                                            }
+                                            onClick={() => setTab(name)}
+                                        >
+                                            {name === 'telemetry'
+                                                ? 'Telemetry'
+                                                : name === 'evidence'
+                                                  ? 'Optimization'
+                                                  : 'Capabilities'}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="panel__body" role="tabpanel">
+                                    {tab === 'telemetry' && (
+                                        <TelemetryPanel
+                                            data={metrics}
+                                            onSeed={seed}
+                                            onClearSeeded={clearSeeded}
+                                            busy={busy}
+                                        />
+                                    )}
+                                    {tab === 'evidence' && (
+                                        <EvidencePanel
+                                            run={run}
+                                            optimizing={optimizing}
+                                            countdown={countdown}
+                                            applying={applying}
+                                            sentryOrg={studio.sentry.org}
+                                            onApply={() =>
+                                                run && apply(run, 'manual')
+                                            }
+                                            onCancelAuto={() =>
+                                                setCountdown(null)
+                                            }
+                                        />
+                                    )}
+                                    {tab === 'capabilities' && (
+                                        <CapabilitiesPanel studio={studio} />
+                                    )}
+                                </div>
+                                <p className="panel__foot">
+                                    {studio.sentry.enabled
+                                        ? 'Sentry tracing and replay are on.'
+                                        : 'Sentry is off (no DSN); latency is still measured locally.'}
+                                </p>
+                            </aside>
+                        )}
                     </div>
                 )}
 
                 {active && !developerMode && (
                     <div className="user-tools">
-                        <a className="developer-link" href="/developer">Developer console</a>
                         <CustomizationChat
                             generating={generating}
                             onCustomize={generate}
                         />
                         <div className="history-anchor">
-                            <button type="button" className="operations-button" aria-expanded={historyOpen} onClick={() => setHistoryOpen((open) => !open)}>
+                            <button
+                                type="button"
+                                className="operations-button"
+                                aria-expanded={operationsOpen}
+                                onClick={() =>
+                                    setOperationsOpen((open) => !open)
+                                }
+                            >
                                 Operations
                             </button>
-                            {historyOpen && (
-                                <div className="operations-menu" role="menu" aria-label="Dashboard operations">
-                                    <button type="button" role="menuitem" onClick={undo} disabled={!active.parentVersionId}>↶ Undo</button>
-                                    <button type="button" role="menuitem" onClick={() => setHistoryOpen(true)}>Version history</button>
-                                    {historyOpen && <HistoryMenu versions={studio.versions} activeId={active.id} onRestore={restore} onClose={() => setHistoryOpen(false)} />}
+                            {operationsOpen && (
+                                <div
+                                    className="operations-menu"
+                                    role="menu"
+                                    aria-label="Dashboard operations"
+                                >
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={undo}
+                                        disabled={!active.parentVersionId}
+                                    >
+                                        ↶ Undo
+                                    </button>
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => {
+                                            setOperationsOpen(false);
+                                            setHistoryOpen(true);
+                                        }}
+                                    >
+                                        Version history
+                                    </button>
                                 </div>
+                            )}
+                            {historyOpen && (
+                                <HistoryMenu
+                                    versions={studio.versions}
+                                    activeId={active.id}
+                                    onRestore={restore}
+                                    onClose={() => setHistoryOpen(false)}
+                                />
                             )}
                         </div>
                     </div>

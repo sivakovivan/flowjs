@@ -319,90 +319,98 @@ export function FlowStudio({
 
     return (
         <MotionConfig reducedMotion="user">
-            <main className="studio">
-                <header className="bar">
-                    <div className="bar__brand">
-                        <span className="wordmark">flow.js</span>
-                        <span className="bar__app">
-                            {studio.application.name}
-                        </span>
-                    </div>
-
-                    {active && developerMode && (
-                        <div className="bar__versions">
-                            <span
-                                className="version-badge"
-                                aria-label={`Active version ${active.id}`}
-                            >
-                                {active.id}
+            <main
+                className={`studio ${developerMode ? 'studio--developer' : 'studio--client'} studio--embedded`}
+            >
+                {developerMode ? (
+                    <header className="bar">
+                        <div className="bar__brand">
+                            <span className="wordmark">flow.js</span>
+                            <span className="bar__app">
+                                {studio.application.name}
                             </span>
-                            <button
-                                type="button"
-                                className="chrome-button"
-                                onClick={undo}
-                                disabled={!active.parentVersionId}
-                            >
-                                ↶ Undo
-                            </button>
-                            <div className="history-anchor">
+                        </div>
+
+                        {active && developerMode && (
+                            <div className="bar__versions">
+                                <span
+                                    className="version-badge"
+                                    aria-label={`Active version ${active.id}`}
+                                >
+                                    {active.id}
+                                </span>
                                 <button
                                     type="button"
                                     className="chrome-button"
-                                    aria-expanded={historyOpen}
-                                    onClick={() =>
-                                        setHistoryOpen((open) => !open)
-                                    }
+                                    onClick={undo}
+                                    disabled={!active.parentVersionId}
                                 >
-                                    History
+                                    ↶ Undo
                                 </button>
-                                {historyOpen && (
-                                    <HistoryMenu
-                                        versions={studio.versions}
-                                        activeId={active.id}
-                                        onRestore={restore}
-                                        onClose={() => setHistoryOpen(false)}
-                                    />
-                                )}
+                                <div className="history-anchor">
+                                    <button
+                                        type="button"
+                                        className="chrome-button"
+                                        aria-expanded={historyOpen}
+                                        onClick={() =>
+                                            setHistoryOpen((open) => !open)
+                                        }
+                                    >
+                                        History
+                                    </button>
+                                    {historyOpen && (
+                                        <HistoryMenu
+                                            versions={studio.versions}
+                                            activeId={active.id}
+                                            onRestore={restore}
+                                            onClose={() =>
+                                                setHistoryOpen(false)
+                                            }
+                                        />
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        )}
 
-                    {active && developerMode && (
-                        <div className="bar__controls">
-                            <label className="rate">
-                                <span className="rate__ends">
-                                    <span>Stable</span>
-                                    <span>Experimental</span>
-                                </span>
-                                <input
-                                    type="range"
-                                    min={0}
-                                    max={1}
-                                    step={0.05}
-                                    value={rate}
-                                    onChange={(event) =>
-                                        setRate(Number(event.target.value))
-                                    }
-                                    aria-label="Mutation rate"
-                                    aria-valuetext={`${rate.toFixed(2)}`}
-                                />
-                                <span className="rate__hint">
-                                    {threshold === null
-                                        ? 'Rate 0: never applies changes automatically'
-                                        : `Rate ${rate.toFixed(2)}: auto-applies scores of ${threshold.toFixed(2)} or more`}
-                                </span>
-                            </label>
-                            <button
-                                type="button"
-                                className="chrome-button chrome-button--signal"
-                                onClick={optimize}
-                                disabled={optimizing || applying}
-                            >
-                                {optimizing ? 'Optimizing…' : 'Optimize now'}
-                            </button>
-                        </div>
-                    )}
-                </header>
+                        {active && developerMode && (
+                            <div className="bar__controls">
+                                <label className="rate">
+                                    <span className="rate__ends">
+                                        <span>Stable</span>
+                                        <span>Experimental</span>
+                                    </span>
+                                    <input
+                                        type="range"
+                                        min={0}
+                                        max={1}
+                                        step={0.05}
+                                        value={rate}
+                                        onChange={(event) =>
+                                            setRate(Number(event.target.value))
+                                        }
+                                        aria-label="Mutation rate"
+                                        aria-valuetext={`${rate.toFixed(2)}`}
+                                    />
+                                    <span className="rate__hint">
+                                        {threshold === null
+                                            ? 'Rate 0: never applies changes automatically'
+                                            : `Rate ${rate.toFixed(2)}: auto-applies scores of ${threshold.toFixed(2)} or more`}
+                                    </span>
+                                </label>
+                                <button
+                                    type="button"
+                                    className="chrome-button chrome-button--signal"
+                                    onClick={optimize}
+                                    disabled={optimizing || applying}
+                                >
+                                    {optimizing
+                                        ? 'Optimizing…'
+                                        : 'Optimize now'}
+                                </button>
+                            </div>
+                        )}
+                    </header>
+                ) : null}
 
                 {!active ? (
                     <GeneratePrompt
@@ -413,39 +421,114 @@ export function FlowStudio({
                     />
                 ) : (
                     <div className="workspace">
-                        <section
-                            className="stage"
-                            style={themeStyle(studio.application.theme)}
-                            aria-label={`${studio.application.name} dashboard`}
-                        >
-                            <div className="stage__meta">
-                                <p>
-                                    Generated interface, {active.id}:{' '}
-                                    {active.reason}
-                                </p>
-                                {generatedProvenance &&
-                                    active.source === 'generated' && (
-                                        <SourceBadge
-                                            source={generatedProvenance.source}
-                                            model={generatedProvenance.model}
-                                            fallbackReason={
-                                                generatedProvenance.fallbackReason
-                                            }
-                                        />
-                                    )}
-                            </div>
-                            <RendererProvider
-                                versionId={active.id}
-                                capabilities={studio.capabilities}
-                                initialState={studio.defaultState}
-                                notify={notify}
+                        {developerMode ? (
+                            <section
+                                className="preview-frame"
+                                aria-label="Live client preview"
                             >
-                                <Dashboard
-                                    schema={active.schema}
-                                    changes={changes}
+                                <div className="preview-frame__bar">
+                                    <span>Live preview</span>
+                                    <span>{active.id} · Northwind Sales</span>
+                                    <a
+                                        href="/"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                    >
+                                        Open app ↗
+                                    </a>
+                                </div>
+                                <iframe
+                                    key={active.id}
+                                    title="Northwind Sales client preview"
+                                    src="/"
                                 />
-                            </RendererProvider>
-                        </section>
+                            </section>
+                        ) : (
+                            <section
+                                className="stage"
+                                style={themeStyle(studio.application.theme)}
+                                aria-label={`${studio.application.name} dashboard`}
+                            >
+                                <div className="client-topbar">
+                                    <div className="client-brand">
+                                        <span className="client-brand__mark">
+                                            N
+                                        </span>
+                                        <strong>Northwind</strong>
+                                        <span>Sales</span>
+                                    </div>
+                                    <nav aria-label="Main navigation">
+                                        <a
+                                            href="#overview"
+                                            className="is-current"
+                                        >
+                                            Overview
+                                        </a>
+                                        <a href="#transactions-table">
+                                            Transactions
+                                        </a>
+                                        <a href="#customers-table">Customers</a>
+                                    </nav>
+                                </div>
+                                <div className="client-content" id="overview">
+                                    <div className="client-heading">
+                                        <div>
+                                            <p className="client-eyebrow">
+                                                SALES WORKSPACE / OVERVIEW
+                                            </p>
+                                            <h1>Good morning.</h1>
+                                            <p>
+                                                Here’s what’s happening across
+                                                your business today.
+                                            </p>
+                                        </div>
+                                        <span className="client-live">
+                                            <span /> Live data
+                                        </span>
+                                    </div>
+                                    {developerMode && (
+                                        <div className="stage__meta">
+                                            <p>
+                                                Generated interface, {active.id}
+                                                : {active.reason}
+                                            </p>
+                                            {generatedProvenance &&
+                                                active.source ===
+                                                    'generated' && (
+                                                    <SourceBadge
+                                                        source={
+                                                            generatedProvenance.source
+                                                        }
+                                                        model={
+                                                            generatedProvenance.model
+                                                        }
+                                                        fallbackReason={
+                                                            generatedProvenance.fallbackReason
+                                                        }
+                                                    />
+                                                )}
+                                        </div>
+                                    )}
+                                    <RendererProvider
+                                        versionId={active.id}
+                                        capabilities={studio.capabilities}
+                                        initialState={studio.defaultState}
+                                        notify={notify}
+                                    >
+                                        <Dashboard
+                                            schema={active.schema}
+                                            changes={changes}
+                                        />
+                                    </RendererProvider>
+                                    <footer className="client-footer">
+                                        <span>Northwind Sales</span>
+                                        <span>
+                                            Powered by flow.js · {active.id}
+                                        </span>
+                                    </footer>
+                                </div>
+                            </section>
+                        )}
 
                         {developerMode && (
                             <aside

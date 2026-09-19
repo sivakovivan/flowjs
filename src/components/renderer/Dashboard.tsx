@@ -58,6 +58,7 @@ function ComponentFrame(props: {
     return (
         <motion.section
             ref={ref}
+            id={component.id}
             layout
             layoutId={component.id}
             transition={LAYOUT_TRANSITION}

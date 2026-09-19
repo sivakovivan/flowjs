@@ -100,15 +100,42 @@ export function layoutRows(schema: UISchema): Map<string, number> {
 
 export type ComponentChange = "moved" | "resized" | "swapped" | "shown" | "hidden";
 
+/**
+ * Components whose relative order changed: everything outside the longest run
+ * that kept its old order. Components that only shifted to make room are not moved.
+ */
+function movedComponents(before: UISchema, after: UISchema): Set<string> {
+  const oldIndex = new Map(normalizeOrder(before).components.map((c) => [c.id, c.order]));
+  const sequence = normalizeOrder(after).components.filter((c) => oldIndex.has(c.id));
+  const length = sequence.map(() => 1);
+  const previous = sequence.map(() => -1);
+  for (let i = 0; i < sequence.length; i++) {
+    for (let j = 0; j < i; j++) {
+      if (oldIndex.get(sequence[j].id)! < oldIndex.get(sequence[i].id)! && length[j] + 1 > length[i]) {
+        length[i] = length[j] + 1;
+        previous[i] = j;
+      }
+    }
+  }
+  const kept = new Set<string>();
+  let cursor = length.indexOf(Math.max(0, ...length));
+  while (cursor !== -1) {
+    kept.add(sequence[cursor].id);
+    cursor = previous[cursor];
+  }
+  return new Set(sequence.filter((c) => !kept.has(c.id)).map((c) => c.id));
+}
+
 /** What changed per component between two schemas, used to highlight a transition. */
 export function diffSchemas(before: UISchema, after: UISchema): Record<string, ComponentChange[]> {
   const previous = new Map(normalizeOrder(before).components.map((c) => [c.id, c]));
+  const moved = movedComponents(before, after);
   const changes: Record<string, ComponentChange[]> = {};
   for (const component of normalizeOrder(after).components) {
     const old = previous.get(component.id);
     if (!old) continue;
     const list: ComponentChange[] = [];
-    if (old.order !== component.order) list.push("moved");
+    if (moved.has(component.id)) list.push("moved");
     if (old.size !== component.size) list.push("resized");
     if (old.primitive !== component.primitive) list.push("swapped");
     if (!old.visible && component.visible) list.push("shown");

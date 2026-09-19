@@ -100,4 +100,11 @@ describe("diffSchemas", () => {
     expect(changes).toEqual({ "customer-search": ["resized", "hidden"] });
     expect(diffSchemas(before, after)["date-range"]).toEqual(["moved", "swapped"]);
   });
+
+  it("marks only the moved component, not the ones that shift to make room", () => {
+    const after = withComponent("date-range", { order: -1 });
+    expect(diffSchemas(fixtureSchema(), after)).toEqual({ "date-range": ["moved"] });
+    // And the reverse (undo) highlights the same component.
+    expect(diffSchemas(after, fixtureSchema())).toEqual({ "date-range": ["moved"] });
+  });
 });

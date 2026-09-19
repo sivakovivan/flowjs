@@ -68,8 +68,11 @@ describe("retry latency", () => {
     ];
     const exportMetrics = metricsFor([...retried, ...once], calls).components.find((c) => c.componentId === "export")!;
     expect(exportMetrics.retryLatencyMs).toBe(2800);
-    // Across all calls the backend looks fast.
-    expect(computeLatency(calls).find((l) => l.capabilityId === "exportReport")?.slow).toBe(false);
+    // Across all calls the median looks fast; only the tail shows it.
+    expect(computeLatency(calls).find((l) => l.capabilityId === "exportReport")).toMatchObject({
+      slow: false,
+      slowTail: true,
+    });
   });
 
   it("is null when nothing was retried", () => {

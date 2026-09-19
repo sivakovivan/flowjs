@@ -51,7 +51,10 @@ export interface LatencyMetrics {
   p50Ms: number;
   p95Ms: number;
   errorRate: number;
+  /** Median is slow. */
   slow: boolean;
+  /** p95 is slow: some users wait, even when the typical call is fast. */
+  slowTail: boolean;
   traceIds: string[];
   replayIds: string[];
 }
@@ -91,14 +94,16 @@ export function computeLatency(calls: CapabilityCall[]): LatencyMetrics[] {
     const latencies = list.map((c) => c.latencyMs).sort((a, b) => a - b);
     const recent = [...list].sort((a, b) => b.createdAt - a.createdAt);
     const p50Ms = round(percentile(latencies, 0.5), 1);
+    const p95Ms = round(percentile(latencies, 0.95), 1);
     return {
       capabilityId,
       kind: list[0].kind,
       calls: list.length,
       p50Ms,
-      p95Ms: round(percentile(latencies, 0.95), 1),
+      p95Ms,
       errorRate: round(list.filter((c) => !c.ok).length / list.length),
       slow: p50Ms >= SLOW_LATENCY_MS,
+      slowTail: p95Ms >= SLOW_LATENCY_MS,
       traceIds: [...new Set(recent.flatMap((c) => (c.traceId ? [c.traceId] : [])))].slice(0, 3),
       replayIds: [...new Set(recent.flatMap((c) => (c.replayId ? [c.replayId] : [])))].slice(0, 3),
     };

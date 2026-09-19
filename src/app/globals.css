@@ -564,6 +564,11 @@ pre {
   font-weight: 600;
 }
 
+.latency td.is-slow-tail {
+  color: var(--rust);
+  font-weight: 600;
+}
+
 .rejected {
   margin-top: 8px;
   padding: 8px 12px;

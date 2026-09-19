@@ -169,7 +169,7 @@ export function EvidencePanel(props: {
                   <tr key={l.capabilityId} className={l.slow ? "is-slow" : undefined}>
                     <td>{l.capabilityId}</td>
                     <td className="is-numeric">{Math.round(l.p50Ms)}ms</td>
-                    <td className="is-numeric">{Math.round(l.p95Ms)}ms</td>
+                    <td className={`is-numeric ${l.slowTail ? "is-slow-tail" : ""}`}>{Math.round(l.p95Ms)}ms</td>
                     <td>
                       {trace ? (
                         href ? (

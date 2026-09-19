@@ -71,6 +71,13 @@ describe("findFriction", () => {
     expect(findingsFor(session("s", [["date-range", "value_change", 1]]))).toEqual([]);
   });
 
+  it("reports a separated pair once, in its dominant direction", () => {
+    const separated = findingsFor(dateRangeFriction()).filter((f) => f.kind === "separated-related");
+    const pairs = separated.map((f) => [...f.componentIds].sort().join("+"));
+    expect(new Set(pairs).size).toBe(pairs.length);
+    expect(separated[0].componentIds).toEqual(["date-range", "revenue-chart"]);
+  });
+
   it("sorts findings by severity", () => {
     const severities = findingsFor(dateRangeFriction()).map((f) => f.severity);
     expect(severities).toEqual([...severities].sort((a, b) => b - a));

@@ -159,10 +159,14 @@ export function findFriction(input: { app: FlowApp; schema: UISchema; metrics: M
   }
 
   // 22.2 Related controls separated: common A → B sequence, far apart in the layout.
+  // Transitions are sorted by count, so each pair is reported in its dominant direction.
+  const reportedPairs = new Set<string>();
   for (const transition of metrics.transitions) {
     const from = byId.get(transition.from);
     const to = byId.get(transition.to);
     if (!from || !to || !from.visible || !to.visible) continue;
+    const pair = [transition.from, transition.to].sort().join("\u0000");
+    if (reportedPairs.has(pair)) continue;
     const share = from.followedBy.find((f) => f.componentId === to.componentId)?.share ?? 0;
     const distance = Math.abs((rows.get(from.componentId) ?? 0) - (rows.get(to.componentId) ?? 0));
     if (
@@ -172,6 +176,7 @@ export function findFriction(input: { app: FlowApp; schema: UISchema; metrics: M
     ) {
       continue;
     }
+    reportedPairs.add(pair);
     const related = app.graph.related(from.capabilityId, to.capabilityId);
     findings.push({
       kind: "separated-related",

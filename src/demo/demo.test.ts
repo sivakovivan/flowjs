@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { optimizationBrief } from "@/flow/ai/briefs";
 import { GeneratedSchemaOutput, OptimizationOutput, toMutation, toUISchema } from "@/flow/ai/contracts";
+import { createRecordedProvider } from "@/flow/ai/providers";
+import type { Finding } from "@/flow/friction";
+import { computeMetrics } from "@/flow/metrics";
 import { parseDataOutput } from "@/flow/data-contracts";
 import { applyMutations } from "@/flow/mutations";
 import { layoutRows, validateSchema, type UISchema } from "@/flow/schema";
@@ -60,6 +64,7 @@ describe("sales recordings", () => {
     let schema: UISchema = toUISchema(salesRecording.generation);
     for (const recorded of salesRecording.optimizations) {
       const proposal = OptimizationOutput.parse(recorded);
+      if (proposal.mutations.length === 0) continue; // diagnosis only
       const result = applyMutations(schema, proposal.mutations.map(toMutation), salesApp);
       if (!result.ok) throw new Error(`${proposal.reason}: ${result.errors.join(" ")}`);
       schema = result.schema;
@@ -68,5 +73,36 @@ describe("sales recordings", () => {
     expect(rows.get("date-range")).toBe(rows.get("revenue-chart")! - 1); // filter bar directly above
     expect(rows.get("revenue-chart")).toBe(rows.get("export"));
     expect(rows.get("customer-search")).toBe(rows.get("customers-table"));
+  });
+});
+
+describe("recorded provider", () => {
+  const provider = createRecordedProvider(salesApp, salesRecording);
+  const schema = toUISchema(salesRecording.generation);
+  const brief = (findings: Finding[]) =>
+    optimizationBrief({
+      app: salesApp,
+      schema,
+      findings,
+      metrics: computeMetrics({ versionId: "v1", schema, events: [], calls: [] }),
+    });
+  const finding = (classification: Finding["classification"]): Finding => ({
+    kind: "high-retry-action",
+    componentIds: ["export"],
+    classification,
+    severity: 0.9,
+    title: "",
+    evidence: [],
+    suggestion: "",
+  });
+
+  it("replays a no-change diagnosis when backend performance is the top finding", async () => {
+    const output = (await provider.proposeOptimization(brief([finding("performance")]))) as OptimizationOutput;
+    expect(output).toMatchObject({ classification: "performance", mutations: [] });
+  });
+
+  it("replays the first applicable redesign for interface friction", async () => {
+    const output = (await provider.proposeOptimization(brief([finding("ui")]))) as OptimizationOutput;
+    expect(output.reason).toBe("Date control promoted above Revenue");
   });
 });

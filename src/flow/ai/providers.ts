@@ -54,7 +54,11 @@ export interface Recording {
   /** Where the recording came from, shown next to every recorded result. */
   provenance: string;
   generation: GeneratedSchemaOutput;
-  /** Candidate proposals; the first that applies cleanly to the current schema is replayed. */
+  /**
+   * Candidate proposals; the first that applies cleanly to the current schema is
+   * replayed. A performance diagnosis without mutations is replayed when the top
+   * heuristic finding is backend performance.
+   */
   optimizations: OptimizationOutput[];
 }
 
@@ -72,6 +76,14 @@ export function createRecordedProvider(app: FlowApp, recording: Recording | unde
     },
     async proposeOptimization(brief) {
       if (!recording) throw new Error(`No recorded responses for application "${app.id}".`);
+      // When the strongest finding is backend latency, replay the matching diagnosis instead of a redesign.
+      const top = brief.heuristicFindings[0];
+      if (top?.classification === "performance") {
+        const diagnosis = recording.optimizations.find(
+          (candidate) => candidate.classification === "performance" && candidate.mutations.length === 0,
+        );
+        if (diagnosis) return structuredClone(diagnosis);
+      }
       const schema: UISchema = {
         components: brief.currentSchema.map(({ row: _row, ...component }) => component),
       };

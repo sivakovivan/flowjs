@@ -32,6 +32,21 @@ export const salesRecording: Recording = {
 
   optimizations: [
     {
+      finding: "Export is clicked repeatedly because PDF generation is slow, not because the control is hard to use.",
+      classification: "performance",
+      evidence: [
+        "export is clicked again within 30 seconds of the first click",
+        "backend latency in the retrying sessions is well above the 1.5s slow threshold",
+        "the export control is visible and found quickly",
+      ],
+      confidence: 0.78,
+      expectedBenefit: 0,
+      reason: "Export latency flagged for the backend",
+      explanation:
+        "Sentry-correlated latency shows the retries line up with slow PDF exports. Moving or restyling the button would not help; the report endpoint needs to be faster or asynchronous.",
+      mutations: [],
+    },
+    {
       finding: "The date range is used in most sessions but sits below the fold, far from the revenue chart it drives.",
       classification: "ui",
       evidence: [

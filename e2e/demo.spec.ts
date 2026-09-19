@@ -103,3 +103,25 @@ test("a high mutation rate applies automatically and branches from the active ve
   await page.getByRole("button", { name: "History" }).click();
   await expect(page.getByRole("dialog", { name: "UI history" }).locator("li").first()).toContainText("From v1");
 });
+
+test("retries on a slow backend are diagnosed as performance, not redesigned", async ({ page }) => {
+  await page.goto("/");
+  await expect(versionBadge(page)).toHaveText("v3");
+  const exportPdf = page.getByRole("button", { name: "Export PDF" });
+  // Impatient user: clicks again while the slow PDF export is still running.
+  await exportPdf.click();
+  await exportPdf.click();
+  await exportPdf.click();
+  await expect(page.getByText(/PDF report for \d+ transactions is ready/)).toBeVisible({ timeout: 10_000 });
+
+  await page.getByRole("button", { name: "Optimize now" }).click();
+  const evidence = page.locator(".evidence");
+  await expect(evidence.getByText("Backend performance")).toBeVisible();
+  await expect(evidence).toContainText("No interface change. Fix the backend before redesigning this control.");
+  await expect(evidence.locator(".findings")).toContainText("retried because the backend is slow");
+  await expect(evidence.locator(".findings")).toContainText("in sessions that retried");
+  // Whatever the median, the slow tail is visible in the latency table.
+  await expect(evidence.locator(".latency tr", { hasText: "exportReport" }).locator(".is-slow-tail")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Apply change" })).toHaveCount(0);
+  await expect(versionBadge(page)).toHaveText("v3");
+});

@@ -2,7 +2,7 @@
 
 import { MotionConfig } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { api, type MetricsResponse, type OptimizationRun, type StudioState, type VersionRecord } from "@/client/api";
+import { api, type AIProvenance, type MetricsResponse, type OptimizationRun, type StudioState, type VersionRecord } from "@/client/api";
 import { tracker } from "@/client/telemetry";
 import { diffSchemas, type ComponentChange } from "@/flow/schema";
 import { acceptanceThreshold } from "@/flow/scoring";
@@ -239,7 +239,7 @@ export function FlowStudio() {
 
   const active = studio.active;
   const threshold = acceptanceThreshold(rate);
-  const generatedProvenance = active && (active.evidence as { ai?: { source: "live" | "recorded"; model: string; fallbackReason: string | null } } | null)?.ai;
+  const generatedProvenance = active && (active.evidence as { ai?: AIProvenance } | null)?.ai;
 
   return (
     <MotionConfig reducedMotion="user">
@@ -328,6 +328,7 @@ export function FlowStudio() {
                     source={generatedProvenance.source}
                     model={generatedProvenance.model}
                     fallbackReason={generatedProvenance.fallbackReason}
+                    call={generatedProvenance.call}
                   />
                 )}
                 <label className="toggle">

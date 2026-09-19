@@ -89,7 +89,7 @@ export function EvidencePanel(props: {
     return (
       <div className="panel-empty" aria-live="polite">
         <p className="panel-empty__title">Analyzing usage…</p>
-        <p>Aggregating telemetry and latency, then asking OpenAI for the most important friction.</p>
+        <p>Aggregating telemetry and latency, recalling past decisions, then asking the model for the most important friction.</p>
       </div>
     );
   }
@@ -113,7 +113,7 @@ export function EvidencePanel(props: {
         <span className={`classification classification--${ai.classification}`}>
           {ai.classification === "performance" ? "Backend performance" : "Interface friction"}
         </span>
-        <SourceBadge source={ai.source} model={ai.model} fallbackReason={ai.fallbackReason} />
+        <SourceBadge source={ai.source} model={ai.model} fallbackReason={ai.fallbackReason} call={ai.call} />
       </header>
       <h3 className="evidence__finding">{ai.finding}</h3>
       <p className="evidence__explanation">{ai.explanation}</p>
@@ -146,6 +146,18 @@ export function EvidencePanel(props: {
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {(analysis.memories ?? []).length > 0 && (
+        <section className="evidence__section">
+          <h4>Remembered decisions</h4>
+          <ul className="evidence__list evidence__list--memory">
+            {analysis.memories.map((memory) => (
+              <li key={memory.content}>{memory.content.replace(/^\[[^\]]+\]\s*/, "")}</li>
+            ))}
+          </ul>
+          <p className="evidence__sample">Recalled from BackBoard memory and given to the model with this request.</p>
         </section>
       )}
 

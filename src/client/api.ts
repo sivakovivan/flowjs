@@ -17,7 +17,13 @@ export interface StudioState {
   defaultState: StateValues;
   active: VersionRecord | null;
   versions: VersionSummary[];
-  ai: { liveConfigured: boolean; forcedRecorded: boolean; model: string | null };
+  ai: {
+    vendor: "backboard" | "openai" | null;
+    liveConfigured: boolean;
+    forcedRecorded: boolean;
+    model: string | null;
+    memory: boolean;
+  };
   sentry: { enabled: boolean; org: string | null };
   registration: string | null;
 }

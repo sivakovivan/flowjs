@@ -26,7 +26,7 @@ import { GeneratePrompt } from './GeneratePrompt';
 import { HistoryMenu } from './HistoryMenu';
 import { SourceBadge } from './SourceBadge';
 import { TelemetryPanel } from './TelemetryPanel';
-import { CustomizationChat } from './CustomizationChat';
+import { FlowMenu } from './FlowMenu';
 import {
     defaultLayoutTracks,
     type LayoutTrack,
@@ -69,7 +69,6 @@ export function FlowStudio({
     );
     const [tab, setTab] = useState<Tab>('telemetry');
     const [historyOpen, setHistoryOpen] = useState(false);
-    const [operationsOpen, setOperationsOpen] = useState(false);
     const [rate, setRate] = useState(0.5);
     const [busy, setBusy] = useState(false);
     const [layoutTrack, setLayoutTrack] = useState<LayoutTrack>('personal');
@@ -79,7 +78,6 @@ export function FlowStudio({
     );
     const [notices, setNotices] = useState<Notice[]>([]);
     const noticeId = useRef(0);
-    const userToolsRef = useRef<HTMLDivElement>(null);
 
     const notify = useCallback((tone: Notice['tone'], text: string) => {
         const id = ++noticeId.current;
@@ -89,21 +87,6 @@ export function FlowStudio({
             4_500
         );
     }, []);
-
-    useEffect(() => {
-        if (developerMode) return;
-        const close = (event: MouseEvent) => {
-            if (
-                userToolsRef.current &&
-                !userToolsRef.current.contains(event.target as Node)
-            ) {
-                setOperationsOpen(false);
-                setHistoryOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', close);
-        return () => document.removeEventListener('mousedown', close);
-    }, [developerMode]);
 
     const refreshState = useCallback(async () => {
         const next = await api.state(tracker.userId);
@@ -157,6 +140,7 @@ export function FlowStudio({
             setStudio((current) =>
                 current ? { ...current, active: version } : current
             );
+            setLayoutTrack('average');
             setTimeout(() => setChanges({}), HIGHLIGHT_MS);
             await refreshState();
             refreshMetrics();
@@ -629,77 +613,7 @@ export function FlowStudio({
                 )}
 
                 {active && !developerMode && (
-                    <div className="user-tools" ref={userToolsRef}>
-                        <CustomizationChat
-                            generating={generating}
-                            onCustomize={async (prompt) => {
-                                setGenerating(true);
-                                try {
-                                    await api.generate(prompt);
-                                    await refreshState();
-                                    notify(
-                                        'ok',
-                                        'Your request created a new dashboard version.'
-                                    );
-                                } catch (error) {
-                                    notify(
-                                        'error',
-                                        error instanceof Error
-                                            ? error.message
-                                            : 'Could not customize the dashboard.'
-                                    );
-                                } finally {
-                                    setGenerating(false);
-                                }
-                            }}
-                        />
-                        <div className="history-anchor">
-                            <button
-                                type="button"
-                                className="operations-button"
-                                aria-expanded={operationsOpen}
-                                onClick={() =>
-                                    setOperationsOpen((open) => !open)
-                                }
-                            >
-                                Operations
-                            </button>
-                            {operationsOpen && (
-                                <div
-                                    className="operations-menu"
-                                    role="menu"
-                                    aria-label="Dashboard operations"
-                                >
-                                    <button
-                                        type="button"
-                                        role="menuitem"
-                                        onClick={undo}
-                                        disabled={!active.parentVersionId}
-                                    >
-                                        ↶ Undo
-                                    </button>
-                                    <button
-                                        type="button"
-                                        role="menuitem"
-                                        onClick={() => {
-                                            setOperationsOpen(false);
-                                            setHistoryOpen(true);
-                                        }}
-                                    >
-                                        Version history
-                                    </button>
-                                </div>
-                            )}
-                            {historyOpen && (
-                                <HistoryMenu
-                                    versions={studio.versions}
-                                    activeId={active.id}
-                                    onRestore={restore}
-                                    onClose={() => setHistoryOpen(false)}
-                                />
-                            )}
-                        </div>
-                    </div>
+                    <FlowMenu studio={studio} onVersion={transitionTo} />
                 )}
 
                 <div className="notices" aria-live="polite">

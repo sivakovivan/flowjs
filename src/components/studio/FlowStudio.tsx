@@ -160,9 +160,12 @@ export function FlowStudio({
         if (!studio?.active || typeof window === 'undefined') return;
         const key = `flowjs:refresh-optimization:${studio.active.id}`;
         if (sessionStorage.getItem(key)) return;
-        sessionStorage.setItem(key, 'started');
         api.refreshOptimize()
             .then(async (result) => {
+                // Only suppress subsequent refreshes after the server completed
+                // an optimization pass. A 409/no-data response must be retryable
+                // after the user creates more telemetry.
+                sessionStorage.setItem(key, 'completed');
                 if (result.applied && result.version) {
                     await transitionTo(result.version);
                     notify(

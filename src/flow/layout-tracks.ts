@@ -22,7 +22,7 @@ export function personalParent(tracks: LayoutTracks): VersionRecord | null {
 }
 
 /**
- * Demo-safe personal seed: keep the average schema intact while giving a new
+ * Demo-safe personal seed: derive a new schema from the average while giving a new
  * browser its own immutable-looking branch to edit. Server persistence can
  * replace this without changing the renderer contract.
  */
@@ -35,6 +35,17 @@ export function createPersonalDraft(
         ...average,
         id: `${average.id}-personal`,
         parentVersionId: average.id,
+        schema: {
+            ...average.schema,
+            // Mock preference for the scaffold: make search the first control.
+            components: [...average.schema.components]
+                .sort((a, b) => {
+                    const priority = (id: string) =>
+                        id === 'customer-search' ? 0 : 1;
+                    return priority(a.id) - priority(b.id) || a.order - b.order;
+                })
+                .map((component, order) => ({ ...component, order })),
+        },
         reason: 'Personal layout seeded from average',
         createdAt: Date.now(),
     };

@@ -28,7 +28,7 @@ describe('layout tracks', () => {
         const personal = createPersonalDraft(average);
         expect(personal.id).toBe('v1-personal');
         expect(personal.parentVersionId).toBe('v1');
-        expect(personal.schema).toBe(average.schema);
+        expect(personal.schema).not.toBe(average.schema);
         expect(average.id).toBe('v1');
     });
 });

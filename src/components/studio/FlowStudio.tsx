@@ -180,38 +180,51 @@ export function FlowStudio({
         if (!studio?.active || typeof window === 'undefined') return;
         const key = `flowjs:refresh-optimization:${studio.active.id}`;
         if (sessionStorage.getItem(key)) return;
-        api.refreshOptimize()
-            .then(async (result) => {
-                // Only suppress subsequent refreshes after the server completed
-                // an optimization pass. A 409/no-data response must be retryable
-                // after the user creates more telemetry.
+        Promise.allSettled([
+            api.refreshOptimize(),
+            api.refreshPersonal(tracker.userId),
+        ]).then(async ([averageResult, personalResult]) => {
+            // Only suppress subsequent refreshes after the server completed
+            // an optimization pass. A 409/no-data response must be retryable
+            // after the user creates more telemetry.
+            if (averageResult.status === 'fulfilled')
                 sessionStorage.setItem(key, 'completed');
-                if (result.applied && result.version) {
-                    await transitionTo(result.version);
-                    notify(
-                        'ok',
-                        `Applied ${result.version.id} from recent usage.`
+            if (
+                averageResult.status === 'fulfilled' &&
+                averageResult.value.applied &&
+                averageResult.value.version
+            ) {
+                await transitionTo(averageResult.value.version);
+                notify(
+                    'ok',
+                    `Applied ${averageResult.value.version.id} from aggregate usage.`
+                );
+            }
+            if (
+                personalResult.status === 'fulfilled' &&
+                personalResult.value.applied &&
+                personalResult.value.schema
+            ) {
+                const personalSchema = personalResult.value.schema;
+                setStudio((current) => {
+                    if (!current) return null;
+                    const layouts = current?.layouts;
+                    if (!layouts?.average || !layouts.personal) return current;
+                    const nextPersonal = {
+                        ...layouts.personal,
+                        schema: personalSchema,
+                    };
+                    localStorage.setItem(
+                        `flowjs:personal-layout:${current.application.id}`,
+                        JSON.stringify(nextPersonal)
                     );
-                }
-                const personal = await api.refreshPersonal(tracker.userId).catch(() => null);
-                if (personal?.applied && personal.schema) {
-                    const personalSchema = personal.schema;
-                    setStudio((current) => {
-                        if (!current) return null;
-                        const layouts = current?.layouts;
-                        if (!layouts?.average || !layouts.personal) return current;
-                        const nextPersonal = { ...layouts.personal, schema: personalSchema };
-                        localStorage.setItem(
-                            `flowjs:personal-layout:${current.application.id}`,
-                            JSON.stringify(nextPersonal)
-                        );
-                        return { ...current, layouts: { ...layouts, personal: nextPersonal } };
-                    });
-                }
-            })
-            .catch(() => {
-                // Optimization is opportunistic on refresh; normal rendering wins.
-            });
+                    return {
+                        ...current,
+                        layouts: { ...layouts, personal: nextPersonal },
+                    };
+                });
+            }
+        });
     }, [notify, studio?.active, transitionTo]);
 
     async function generate() {

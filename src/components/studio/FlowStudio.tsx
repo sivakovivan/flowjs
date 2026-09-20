@@ -61,6 +61,16 @@ function summarizeChanges(changes: Record<string, ComponentChange[]>): string {
         : 'Layout regenerated';
 }
 
+function regenerationRationale(reason: string): string {
+    const text = reason
+        .replace(/^Personal layout regenerated:\s*/i, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (text.length <= 160) return text;
+    const shortened = text.slice(0, 157);
+    return `${shortened.slice(0, shortened.lastIndexOf(' '))}…`;
+}
+
 function themeStyle(theme: StudioState['application']['theme']): CSSProperties {
     return {
         '--app-primary': theme.primary,
@@ -93,6 +103,9 @@ export function FlowStudio({
     const [layoutChangeNotice, setLayoutChangeNotice] = useState<string | null>(
         null
     );
+    const [layoutChangeRationale, setLayoutChangeRationale] = useState<
+        string | null
+    >(null);
     const [tab, setTab] = useState<Tab>('telemetry');
     const [historyOpen, setHistoryOpen] = useState(false);
     const [rate, setRate] = useState(0.5);
@@ -173,6 +186,7 @@ export function FlowStudio({
     async function regeneratePersonal() {
         if (!studio?.active || personalizing) return;
         setPersonalizing(true);
+        setLayoutChangeRationale(null);
         setLayoutChangeNotice('Analyzing how you use this dashboard…');
         try {
             const [{ version }] = await Promise.all([
@@ -187,6 +201,7 @@ export function FlowStudio({
                 : {};
             setChanges(personalChanges);
             setLayoutChangeNotice(summarizeChanges(personalChanges));
+            setLayoutChangeRationale(regenerationRationale(version.reason));
             setLayoutTrack('personal');
             setStudio((current) => {
                 if (!current) return null;
@@ -203,6 +218,7 @@ export function FlowStudio({
             setTimeout(() => {
                 setChanges({});
                 setLayoutChangeNotice(null);
+                setLayoutChangeRationale(null);
             }, HIGHLIGHT_MS);
         } catch (error) {
             const message =
@@ -210,6 +226,7 @@ export function FlowStudio({
                     ? error.message
                     : 'Could not regenerate your layout.';
             setLayoutChangeNotice(null);
+            setLayoutChangeRationale(null);
             notify('error', message);
         } finally {
             setPersonalizing(false);
@@ -500,7 +517,14 @@ export function FlowStudio({
                                     role="status"
                                 >
                                     <span aria-hidden="true">↗</span>
-                                    {layoutChangeNotice}
+                                    <div className="layout-change-notice__copy">
+                                        <strong>{layoutChangeNotice}</strong>
+                                        {layoutChangeRationale && (
+                                            <small>
+                                                Why: {layoutChangeRationale}
+                                            </small>
+                                        )}
+                                    </div>
                                 </div>
                             )}
                             <div className="stage__meta">

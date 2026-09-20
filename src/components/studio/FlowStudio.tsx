@@ -154,6 +154,28 @@ export function FlowStudio({
         [refreshMetrics, refreshState, studio?.active]
     );
 
+    // Run one adaptive pass per version per browser session. A 409 simply means
+    // this is a new dashboard with no usage data yet; it should not block render.
+    useEffect(() => {
+        if (!studio?.active || typeof window === 'undefined') return;
+        const key = `flowjs:refresh-optimization:${studio.active.id}`;
+        if (sessionStorage.getItem(key)) return;
+        sessionStorage.setItem(key, 'started');
+        api.refreshOptimize()
+            .then(async (result) => {
+                if (result.applied && result.version) {
+                    await transitionTo(result.version);
+                    notify(
+                        'ok',
+                        `Applied ${result.version.id} from recent usage.`
+                    );
+                }
+            })
+            .catch(() => {
+                // Optimization is opportunistic on refresh; normal rendering wins.
+            });
+    }, [notify, studio?.active, transitionTo]);
+
     async function generate() {
         setGenerating(true);
         setGenerateError(null);

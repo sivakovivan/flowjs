@@ -10,7 +10,13 @@ export async function POST(request: Request) {
         const { userId } = RequestBody.parse(await request.json());
         const runtime = getRuntime();
         const run = await runtime.optimize({ userId });
-        if (run.status !== 'auto') return { run, schema: null, applied: false };
+        // Demo mode intentionally applies any validated proposal so the
+        // personal track is observable before we tune confidence thresholds.
+        if (
+            (run.status !== 'auto' && run.status !== 'pending') ||
+            run.proposedMutations.length === 0
+        )
+            return { run, schema: null, applied: false };
         const result = applyMutations(
             runtime.store.getActiveVersion(runtime.app.id)!.schema,
             run.proposedMutations,

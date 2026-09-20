@@ -533,12 +533,22 @@ export class FlowStore {
         });
     }
 
-    listEvents(applicationId: string, versionId: string): TelemetryEvent[] {
+    listEvents(
+        applicationId: string,
+        versionId: string,
+        userId?: string
+    ): TelemetryEvent[] {
         const rows = this.db
             .prepare(
-                'SELECT * FROM telemetry_events WHERE application_id = ? AND version_id = ? ORDER BY created_at, id'
+                userId
+                    ? 'SELECT * FROM telemetry_events WHERE application_id = ? AND version_id = ? AND user_id = ? ORDER BY created_at, id'
+                    : 'SELECT * FROM telemetry_events WHERE application_id = ? AND version_id = ? ORDER BY created_at, id'
             )
-            .all(applicationId, versionId) as Row[];
+            .all(
+                ...(userId
+                    ? [applicationId, versionId, userId]
+                    : [applicationId, versionId])
+            ) as Row[];
         return rows.map((row) => ({
             applicationId: row.application_id as string,
             versionId: row.version_id as string,

@@ -193,6 +193,20 @@ export function FlowStudio({
                         `Applied ${result.version.id} from recent usage.`
                     );
                 }
+                const personal = await api.refreshPersonal(tracker.userId).catch(() => null);
+                if (personal?.applied && personal.schema) {
+                    const personalSchema = personal.schema;
+                    setStudio((current) => {
+                        const layouts = current?.layouts;
+                        if (!layouts?.average || !layouts.personal) return current;
+                        const nextPersonal = { ...layouts.personal, schema: personalSchema };
+                        localStorage.setItem(
+                            `flowjs:personal-layout:${current.application.id}`,
+                            JSON.stringify(nextPersonal)
+                        );
+                        return { ...current, layouts: { ...layouts, personal: nextPersonal } };
+                    });
+                }
             })
             .catch(() => {
                 // Optimization is opportunistic on refresh; normal rendering wins.

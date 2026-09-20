@@ -543,21 +543,6 @@ export function FlowStudio({
                                         My layout
                                     </button>
                                 </div>
-                                {!developerMode && (
-                                    <button
-                                        type="button"
-                                        className="regenerate-layout"
-                                        onClick={regeneratePersonal}
-                                        disabled={personalizing}
-                                    >
-                                        <span aria-hidden="true">
-                                            {personalizing ? '◌' : '✦'}
-                                        </span>
-                                        {personalizing
-                                            ? 'Regenerating…'
-                                            : 'Regenerate layout'}
-                                    </button>
-                                )}
                                 {generatedProvenance &&
                                     active.source === 'generated' && (
                                         <SourceBadge
@@ -654,7 +639,12 @@ export function FlowStudio({
                 )}
 
                 {active && !developerMode && (
-                    <FlowMenu studio={studio} onVersion={transitionTo} />
+                    <FlowMenu
+                        studio={studio}
+                        onVersion={transitionTo}
+                        onRegenerate={regeneratePersonal}
+                        regenerating={personalizing}
+                    />
                 )}
 
                 <div className="notices" aria-live="polite">

@@ -12,6 +12,8 @@ import {
 const paths = {
     undo: 'M9 5 4 10l5 5M4 10h10a6 6 0 0 1 0 12',
     redo: 'm15 5 5 5-5 5m5-5H10a6 6 0 0 0 0 12',
+    regenerate:
+        'M20 7h-5V2M4 17h5v5M5.1 9A8 8 0 0 1 18.4 5.6L20 7M4 17l1.6 1.4A8 8 0 0 0 18.9 15',
     history: 'M3 11a9 9 0 1 1 2 7M3 4v7h7m2-5v6l4 2',
     customize: 'm12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z',
 };
@@ -36,9 +38,13 @@ function Icon({ name }: { name: keyof typeof paths }) {
 export function FlowMenu({
     studio,
     onVersion,
+    onRegenerate,
+    regenerating,
 }: {
     studio: StudioState;
     onVersion: (version: VersionRecord) => Promise<void>;
+    onRegenerate: () => Promise<void>;
+    regenerating: boolean;
 }) {
     const [view, setView] = useState<
         'actions' | 'history' | 'customize' | null
@@ -188,6 +194,18 @@ export function FlowMenu({
                                 Redo
                             </button>
                             <button
+                                disabled={busy || regenerating}
+                                onClick={() => {
+                                    close();
+                                    void onRegenerate();
+                                }}
+                            >
+                                <Icon name="regenerate" />
+                                {regenerating
+                                    ? 'Regenerating…'
+                                    : 'Regenerate layout'}
+                            </button>
+                            <button
                                 disabled={busy}
                                 onClick={() => setView('history')}
                             >
@@ -269,6 +287,7 @@ export function FlowMenu({
                 aria-expanded={view !== null}
                 aria-controls="flow-actions"
                 aria-haspopup="dialog"
+                aria-busy={regenerating}
                 onClick={() => (view ? close() : setView('actions'))}
             >
                 <MenuGlass circle />

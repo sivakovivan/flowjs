@@ -216,9 +216,15 @@ test('refresh keeps the layout and the regenerate button visibly changes it', as
     page,
 }) => {
     await page.goto('/');
+    const controls = page.getByRole('button', {
+        name: 'flow.js controls',
+        exact: true,
+    });
+    await controls.click();
     await expect(
         page.getByRole('button', { name: 'Regenerate layout' })
     ).toBeVisible();
+    await page.keyboard.press('Escape');
     const firstLabel = await page.locator('.stage__meta p').innerText();
     const firstOrder = await page
         .locator('[data-component]')
@@ -235,10 +241,9 @@ test('refresh keeps the layout and the regenerate button visibly changes it', as
         );
     expect(reloadedOrder).toEqual(firstOrder);
 
+    await controls.click();
     await page.getByRole('button', { name: 'Regenerate layout' }).click();
-    await expect(
-        page.getByRole('button', { name: 'Regenerating…' })
-    ).toBeDisabled();
+    await expect(page.locator('.stage')).toHaveAttribute('aria-busy', 'true');
     await expect(page.locator('.layout-change-notice')).toContainText(
         'Layout regenerated'
     );

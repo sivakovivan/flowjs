@@ -9,9 +9,15 @@ import type { FlowAIProvider } from './ai/providers';
 import { findFriction, type Finding } from './friction';
 import { computeMetrics, type Metrics } from './metrics';
 import { applyMutations, type Mutation } from './mutations';
+import { compatiblePrimitives } from './primitives';
 import { seedSessions } from './seed';
 import type { FlowApp } from './registry';
-import { normalizeOrder, validateSchema, type UISchema } from './schema';
+import {
+    diffSchemas,
+    normalizeOrder,
+    validateSchema,
+    type UISchema,
+} from './schema';
 import { decideAutoApply, scoreProposal, type MutationScore } from './scoring';
 import {
     FlowStore,
@@ -82,25 +88,60 @@ function layoutSignature(schema: UISchema): string {
     );
 }
 
-/** Last-resort invariant: even a conservative/replayed model response becomes a new layout. */
-function ensureLayoutChanged(schema: UISchema, previous: UISchema): UISchema {
+/**
+ * A personal regeneration is a visible product moment. Keep a strong AI result,
+ * but amplify conservative/recorded output so the user can see the adaptation.
+ */
+function ensureDemonstrableLayoutChange(
+    schema: UISchema,
+    previous: UISchema,
+    app: FlowApp
+): UISchema {
     const normalized = normalizeOrder(schema);
-    if (layoutSignature(normalized) !== layoutSignature(previous))
+    const initialChanges = Object.values(diffSchemas(previous, normalized));
+    const changedComponents = initialChanges.length;
+    const hasStructuralChange = initialChanges.some((changes) =>
+        changes.some((change) => change === 'resized' || change === 'swapped')
+    );
+    if (
+        layoutSignature(normalized) !== layoutSignature(previous) &&
+        changedComponents >= 4 &&
+        hasStructuralChange
+    )
         return normalized;
+
     const components = [...normalized.components];
-    if (components.length > 1) {
-        components.push(components.shift()!);
-        return {
-            components: components.map((component, order) => ({
+    if (components.length > 2) {
+        components.push(...components.splice(0, 2));
+    }
+    const sizes = ['small', 'medium', 'large', 'full'] as const;
+    let swaps = 0;
+    return {
+        components: components.map((component, order) => {
+            const capability = app.capability(component.capability);
+            const variants = capability
+                ? compatiblePrimitives(capability)
+                : [component.primitive];
+            const canSwap = swaps < 2 && variants.length > 1;
+            if (canSwap) swaps += 1;
+            return {
                 ...component,
                 order,
-            })),
-        };
-    }
-    const only = components[0];
-    const sizes = ['small', 'medium', 'large', 'full'] as const;
-    const nextSize = sizes[(sizes.indexOf(only.size) + 1) % sizes.length];
-    return { components: [{ ...only, size: nextSize, order: 0 }] };
+                size:
+                    component.visible && order < 4
+                        ? sizes[
+                              (sizes.indexOf(component.size) + 1) % sizes.length
+                          ]
+                        : component.size,
+                primitive: canSwap
+                    ? variants[
+                          (variants.indexOf(component.primitive) + 1) %
+                              variants.length
+                      ]
+                    : component.primitive,
+            };
+        }),
+    };
 }
 
 export class RuntimeError extends Error {
@@ -327,7 +368,7 @@ export function createRuntime(deps: {
             return { version, provenance };
         },
 
-        /** Regenerate a complete personal schema from this user's evidence on every refresh. */
+        /** Regenerate a complete personal schema from this user's evidence on demand. */
         async regeneratePersonal(userId: string): Promise<{
             version: VersionRecord;
             provenance: AIProvenance;
@@ -358,7 +399,7 @@ export function createRuntime(deps: {
                 previousPersonalVersionId:
                     previous.id === average.id ? null : previous.id,
                 refreshInstruction:
-                    'Create a complete new personal layout for this refresh. A material layout change is mandatory even with sparse evidence.',
+                    'Create a complete new personal layout. Make the adaptation visually obvious: move several components and change useful sizes or primitive variants, even with sparse evidence.',
             };
             const { value, provenance } = await withFallback<{
                 schema: UISchema;
@@ -380,9 +421,10 @@ export function createRuntime(deps: {
                         ? {
                               ok: true,
                               value: {
-                                  schema: ensureLayoutChanged(
+                                  schema: ensureDemonstrableLayoutChange(
                                       validated.schema,
-                                      previous.schema
+                                      previous.schema,
+                                      app
                                   ),
                                   reasoning: parsed.data.reasoning,
                               },

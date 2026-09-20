@@ -20,9 +20,9 @@ const MotionCardContent = motion.create(CardContent);
 
 const LAYOUT_TRANSITION = {
     type: 'spring',
-    stiffness: 170,
-    damping: 24,
-    mass: 0.9,
+    stiffness: 105,
+    damping: 19,
+    mass: 1.05,
 } as const;
 
 const CHANGE_LABEL: Record<ComponentChange, string> = {
@@ -70,6 +70,7 @@ function ComponentFrame(props: {
             className={`app-card app-card--${capability.kind} app-card--${component.primitive} ${changes ? 'is-changed' : ''}`}
             style={{ gridColumn: `span ${SIZE_SPAN[component.size]}` }}
             data-component={component.id}
+            data-changing={changes ? changes.join(' ') : undefined}
             aria-label={capability.label}
             onPointerEnter={() =>
                 tracker.track(component.id, 'component_hover')

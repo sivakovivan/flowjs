@@ -212,11 +212,13 @@ test('retries on a slow backend are diagnosed as performance, not redesigned', a
     await expect(versionBadge(page)).toHaveText('v3');
 });
 
-test('every user refresh creates and displays a changed personal version', async ({
+test('refresh keeps the layout and the regenerate button visibly changes it', async ({
     page,
 }) => {
     await page.goto('/');
-    await expect(page.getByText(/^Personal layout · p/)).toBeVisible();
+    await expect(
+        page.getByRole('button', { name: 'Regenerate layout' })
+    ).toBeVisible();
     const firstLabel = await page.locator('.stage__meta p').innerText();
     const firstOrder = await page
         .locator('[data-component]')
@@ -225,9 +227,20 @@ test('every user refresh creates and displays a changed personal version', async
         );
 
     await page.reload();
-    await expect(page.getByText(/^Personal layout · p/)).toBeVisible();
+    await expect(page.locator('.stage__meta p')).toHaveText(firstLabel);
+    const reloadedOrder = await page
+        .locator('[data-component]')
+        .evaluateAll((nodes) =>
+            nodes.map((node) => node.getAttribute('data-component'))
+        );
+    expect(reloadedOrder).toEqual(firstOrder);
+
+    await page.getByRole('button', { name: 'Regenerate layout' }).click();
+    await expect(
+        page.getByRole('button', { name: 'Regenerating…' })
+    ).toBeDisabled();
     await expect(page.locator('.layout-change-notice')).toContainText(
-        'Your layout was refreshed'
+        'Layout regenerated'
     );
     await expect(page.locator('.change-tag')).not.toHaveCount(0);
     const secondLabel = await page.locator('.stage__meta p').innerText();

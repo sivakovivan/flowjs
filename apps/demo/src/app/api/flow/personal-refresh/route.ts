@@ -15,7 +15,7 @@ export async function POST(request: Request) {
         } catch {
             return {
                 run: null,
-                schema: demoPersonalSchema(runtime),
+                schema: demoPersonalSchema(runtime, userId),
                 applied: true,
             };
         }
@@ -25,7 +25,11 @@ export async function POST(request: Request) {
             (run.status !== 'auto' && run.status !== 'pending') ||
             run.proposedMutations.length === 0
         )
-            return { run, schema: demoPersonalSchema(runtime), applied: true };
+            return {
+                run,
+                schema: demoPersonalSchema(runtime, userId),
+                applied: true,
+            };
         const result = applyMutations(
             runtime.store.getActiveVersion(runtime.app.id)!.schema,
             run.proposedMutations,
@@ -36,18 +40,20 @@ export async function POST(request: Request) {
     });
 }
 
-function demoPersonalSchema(runtime: ReturnType<typeof getRuntime>) {
+function demoPersonalSchema(
+    runtime: ReturnType<typeof getRuntime>,
+    userId: string
+) {
     const average = runtime.store.getActiveVersion(runtime.app.id)!.schema;
+    const events = runtime.store.listEvents(runtime.app.id, average.id, userId);
+    const shift = events.length % Math.max(1, average.components.length);
+    const components = [...average.components];
+    if (shift) components.push(...components.splice(0, shift));
     return {
         ...average,
-        components: [...average.components]
-            .sort((a, b) =>
-                a.id === 'customer-search'
-                    ? -1
-                    : b.id === 'customer-search'
-                      ? 1
-                      : a.order - b.order
-            )
-            .map((component, order) => ({ ...component, order })),
+        components: components.map((component, order) => ({
+            ...component,
+            order,
+        })),
     };
 }

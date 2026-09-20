@@ -178,7 +178,7 @@ export function FlowStudio({
     // this is a new dashboard with no usage data yet; it should not block render.
     useEffect(() => {
         if (!studio?.active || typeof window === 'undefined') return;
-        const key = `flowjs:refresh-optimization:${studio.active.id}`;
+        const key = `flowjs:refresh-optimization:${studio.active.id}:${tracker.sessionId}`;
         if (sessionStorage.getItem(key)) return;
         Promise.allSettled([
             api.refreshOptimize(),
@@ -556,7 +556,10 @@ export function FlowStudio({
                                     )}
                             </div>
                             <RendererProvider
-                                versionId={displayedVersion.id}
+                                // Personal drafts are browser-local; telemetry is
+                                // attributed to their persisted average parent so
+                                // the server can validate and analyze the events.
+                                versionId={active.id}
                                 capabilities={studio.capabilities}
                                 initialState={studio.defaultState}
                                 notify={notify}

@@ -14,7 +14,7 @@ Requires Node 24 or later (for the built-in `node:sqlite`) and pnpm. If pnpm is 
 
 ```bash
 pnpm install
-cp apps/demo/.env.example apps/demo/.env.local   # optional: add OpenAI and Sentry credentials
+cp apps/demo/.env.example .env.local   # optional: add OpenAI and Sentry credentials at the workspace root
 pnpm dev                     # http://localhost:3000
 ```
 

@@ -250,6 +250,9 @@ test('refresh keeps the layout and the regenerate button visibly changes it', as
     await expect(page.locator('.layout-change-notice')).toContainText(
         'Why: Headline revenue and order totals lead'
     );
+    await expect(page.locator('.layout-change-notice')).toContainText(
+        'Secondary views, the date filter and account tools follow below.'
+    );
     await expect(page.locator('.change-tag')).not.toHaveCount(0);
     const secondLabel = await page.locator('.stage__meta p').innerText();
     const secondOrder = await page

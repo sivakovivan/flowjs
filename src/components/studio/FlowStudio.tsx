@@ -62,13 +62,10 @@ function summarizeChanges(changes: Record<string, ComponentChange[]>): string {
 }
 
 function regenerationRationale(reason: string): string {
-    const text = reason
+    return reason
         .replace(/^Personal layout regenerated:\s*/i, '')
         .replace(/\s+/g, ' ')
         .trim();
-    if (text.length <= 160) return text;
-    const shortened = text.slice(0, 157);
-    return `${shortened.slice(0, shortened.lastIndexOf(' '))}…`;
 }
 
 function themeStyle(theme: StudioState['application']['theme']): CSSProperties {

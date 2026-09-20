@@ -215,7 +215,11 @@ test('retries on a slow backend are diagnosed as performance, not redesigned', a
 test('refresh keeps the layout and the regenerate button visibly changes it', async ({
     page,
 }) => {
+    await page.request.post('/api/flow/generate');
     await page.goto('/');
+    await expect(
+        page.getByRole('button', { name: 'Aggregate', exact: true })
+    ).toHaveAttribute('aria-pressed', 'true');
     const controls = page.getByRole('button', {
         name: 'flow.js controls',
         exact: true,
@@ -268,4 +272,109 @@ test('refresh keeps the layout and the regenerate button visibly changes it', as
         .getByRole('button', { name: 'Dismiss layout rationale' })
         .click();
     await expect(page.locator('.layout-change-notice')).toBeHidden();
+});
+
+test('aggregate is the initial baseline and Yours can be generated then toggled without changing it', async ({
+    page,
+}) => {
+    await page.request.post('/api/flow/generate');
+    let personalRequests = 0;
+    page.on('request', (request) => {
+        if (request.url().endsWith('/api/flow/personal-refresh'))
+            personalRequests++;
+    });
+    await page.goto('/');
+    const aggregate = page.getByRole('button', {
+        name: 'Aggregate',
+        exact: true,
+    });
+    const yours = page.getByRole('button', { name: 'Yours', exact: true });
+    await expect(aggregate).toHaveAttribute('aria-pressed', 'true');
+    const baselineLabel = await page.locator('.stage__meta p').innerText();
+    expect(personalRequests).toBe(0);
+    await yours.click();
+    await expect(yours).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.stage__meta p')).toContainText('Your layout');
+    expect(personalRequests).toBe(1);
+    await aggregate.click();
+    await expect(page.locator('.stage__meta p')).toHaveText(baselineLabel);
+    await yours.click();
+    expect(personalRequests).toBe(1);
+    await page.reload();
+    await expect(aggregate).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.stage__meta p')).toHaveText(baselineLabel);
+});
+
+test('labels a simulated cohort independently from the AI provider', async ({
+    page,
+}) => {
+    await page.request.post('/api/flow/generate');
+    await page.route('**/api/flow/state*', async (route) => {
+        const response = await route.fetch();
+        const state = await response.json();
+        state.analyticsSampleKind = 'simulated';
+        state.layouts.average.evidence = {
+            ...state.layouts.average.evidence,
+            aggregate: {
+                source: 'tiger',
+                sampleKind: 'simulated',
+                versionId: 'v1',
+                population: { users: 12, sessions: 24, interactions: 172 },
+                window: {
+                    from: Date.UTC(2026, 8, 19),
+                    to: Date.UTC(2026, 8, 20),
+                },
+                insights: [
+                    {
+                        kind: 'discovery',
+                        summary:
+                            'Simulated users discovered the date filter late.',
+                    },
+                ],
+            },
+        };
+        await route.fulfill({ response, json: state });
+    });
+    await page.goto('/developer');
+    await expect(page.getByTestId('cohort-source')).toHaveText(
+        'Simulated cohort · 12 browsers · 24 sessions'
+    );
+    const evidence = page.getByRole('region', {
+        name: 'Aggregate baseline evidence',
+    });
+    await expect(evidence).toContainText('172 interactions');
+    await expect(evidence).toContainText('Tiger Data');
+    await expect(evidence).toContainText(
+        'Simulated users discovered the date filter late.'
+    );
+});
+
+test('personal AI provenance is independent of the recorded aggregate', async ({
+    page,
+}) => {
+    await page.request.post('/api/flow/generate');
+    await page.route('**/api/flow/personal-refresh', async (route) => {
+        const response = await route.fetch();
+        const result = await response.json();
+        await route.fulfill({
+            response,
+            json: {
+                ...result,
+                provenance: {
+                    source: 'live',
+                    model: 'test-live-provider',
+                    fallbackReason: null,
+                },
+            },
+        });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Yours', exact: true }).click();
+    await expect(page.locator('.stage .source--live')).toHaveText(
+        'Live OpenAI (test-live-provider)'
+    );
+    await page.getByRole('button', { name: 'Aggregate', exact: true }).click();
+    await expect(page.locator('.stage .source--recorded')).toContainText(
+        'Recorded response'
+    );
 });

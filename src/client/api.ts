@@ -34,6 +34,9 @@ export interface StudioState {
     active: VersionRecord | null;
     /** Scaffold for aggregate and per-user layout tracks. */
     layouts?: LayoutTracks;
+    baselineMode?: 'daily' | 'interactive';
+    analyticsSampleKind?: 'live' | 'simulated';
+    baselineRun?: OptimizationRun | null;
     versions: VersionSummary[];
     ai: {
         liveConfigured: boolean;

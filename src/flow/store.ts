@@ -15,6 +15,7 @@ import type { UISchema } from './schema';
 export type VersionSource = 'generated' | 'optimization';
 export type ActivationCause = 'generate' | 'optimize' | 'undo' | 'restore';
 export type AISource = 'live' | 'recorded';
+export type AnalyticsSampleKind = 'live' | 'simulated';
 
 export interface VersionRecord {
     id: string;
@@ -53,10 +54,16 @@ export const TELEMETRY_EVENT_TYPES = [
     'interaction_start',
     'interaction_complete',
     'interaction_error',
+    'active_time',
+    'menu_open',
+    'menu_close',
+    'menu_select',
+    'tab_select',
 ] as const;
 export type TelemetryEventType = (typeof TELEMETRY_EVENT_TYPES)[number];
 
 export interface TelemetryEvent {
+    eventId?: string;
     applicationId: string;
     versionId: string;
     sessionId: string;
@@ -85,6 +92,37 @@ export interface CapabilityCall {
     replayId: string | null;
     seeded: boolean;
     createdAt: number;
+}
+
+export type TelemetryOutboxRecord = {
+    id: string;
+    applicationId: string;
+    createdAt: number;
+} & (
+    | { kind: 'event'; payload: TelemetryEvent }
+    | { kind: 'call'; payload: CapabilityCall }
+);
+
+export interface DailyBaselineResult {
+    status:
+        | 'applied'
+        | 'unchanged'
+        | 'insufficient-data'
+        | 'rejected'
+        | 'pending'
+        | 'failed';
+    runId: string | null;
+    versionId: string | null;
+    reasons: string[];
+}
+
+export interface DailyBaselineJob {
+    windowEnd: number;
+    sourceVersionId: string;
+    status: 'running' | DailyBaselineResult['status'];
+    attempts: number;
+    leaseUntil: number;
+    result: DailyBaselineResult | null;
 }
 
 export type RunStatus =
@@ -196,6 +234,27 @@ CREATE TABLE IF NOT EXISTS capability_calls (
 );
 CREATE INDEX IF NOT EXISTS capability_calls_app ON capability_calls (application_id, capability_id);
 
+CREATE TABLE IF NOT EXISTS telemetry_receipts (
+    application_id TEXT NOT NULL,
+    event_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (application_id, event_id)
+);
+
+CREATE TABLE IF NOT EXISTS telemetry_source (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    id TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS telemetry_outbox (
+    id TEXT PRIMARY KEY,
+    application_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('event', 'call')),
+    payload TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS telemetry_outbox_pending ON telemetry_outbox (application_id, created_at);
+
 CREATE TABLE IF NOT EXISTS optimization_runs (
   id TEXT PRIMARY KEY,
   application_id TEXT NOT NULL,
@@ -223,6 +282,18 @@ CREATE TABLE IF NOT EXISTS personal_versions (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS personal_versions_user ON personal_versions (application_id, user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS daily_baseline_jobs (
+    application_id TEXT NOT NULL REFERENCES applications(id),
+    window_end INTEGER NOT NULL,
+    source_version_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    lease_token TEXT NOT NULL,
+    lease_until INTEGER NOT NULL,
+    attempts INTEGER NOT NULL,
+    result_json TEXT,
+    PRIMARY KEY (application_id, window_end)
+);
 `;
 
 type Row = Record<string, unknown>;
@@ -297,19 +368,132 @@ export class VersionError extends Error {
 
 export class FlowStore {
     readonly db: DatabaseSync;
+    readonly analyticsSampleKind: AnalyticsSampleKind;
 
     constructor(
         path = ':memory:',
-        private readonly now: () => number = Date.now
+        private readonly now: () => number = Date.now,
+        private readonly options: {
+            analytics?: boolean;
+            analyticsSampleKind?: AnalyticsSampleKind;
+        } = {}
     ) {
         if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
         this.db = new DatabaseSync(path);
         this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
         this.db.exec(MIGRATION);
+        const sourceColumns = this.db
+            .prepare('PRAGMA table_info(telemetry_source)')
+            .all() as Row[];
+        if (!sourceColumns.some((column) => column.name === 'sample_kind'))
+            this.db.exec(
+                "ALTER TABLE telemetry_source ADD COLUMN sample_kind TEXT NOT NULL DEFAULT 'live'"
+            );
+        this.analyticsSampleKind = options.analyticsSampleKind ?? 'live';
+        this.db
+            .prepare(
+                'INSERT OR IGNORE INTO telemetry_source (singleton, id, sample_kind) VALUES (1, ?, ?)'
+            )
+            .run(randomUUID(), this.analyticsSampleKind);
+        const source = this.db
+            .prepare(
+                'SELECT sample_kind FROM telemetry_source WHERE singleton = 1'
+            )
+            .get() as Row;
+        if (source.sample_kind !== this.analyticsSampleKind) {
+            this.db.close();
+            throw new Error(
+                'Live and simulated analytics must use separate SQLite databases.'
+            );
+        }
     }
 
     close() {
         this.db.close();
+    }
+
+    get telemetrySourceId(): string {
+        return (
+            this.db
+                .prepare('SELECT id FROM telemetry_source WHERE singleton = 1')
+                .get() as { id: string }
+        ).id;
+    }
+
+    getBaselineJob(
+        applicationId: string,
+        windowEnd: number
+    ): DailyBaselineJob | null {
+        const row = this.db
+            .prepare(
+                `SELECT * FROM daily_baseline_jobs
+            WHERE application_id = ? AND window_end = ?`
+            )
+            .get(applicationId, windowEnd) as Row | undefined;
+        return row
+            ? {
+                  windowEnd: Number(row.window_end),
+                  sourceVersionId: String(row.source_version_id),
+                  status: row.status as DailyBaselineJob['status'],
+                  attempts: Number(row.attempts),
+                  leaseUntil: Number(row.lease_until),
+                  result: parse(row.result_json, null),
+              }
+            : null;
+    }
+
+    claimBaselineJob(
+        applicationId: string,
+        windowEnd: number,
+        sourceVersionId: string
+    ): string | null {
+        const token = randomUUID();
+        const result = this.db
+            .prepare(
+                `INSERT INTO daily_baseline_jobs
+            (application_id, window_end, source_version_id, status, lease_token, lease_until, attempts)
+            VALUES (?, ?, ?, 'running', ?, ?, 1)
+            ON CONFLICT (application_id, window_end) DO UPDATE SET
+                source_version_id = excluded.source_version_id, status = 'running',
+                lease_token = excluded.lease_token, lease_until = excluded.lease_until,
+                attempts = daily_baseline_jobs.attempts + 1, result_json = NULL
+            WHERE daily_baseline_jobs.status IN ('running', 'failed')
+                AND daily_baseline_jobs.lease_until <= ? AND daily_baseline_jobs.attempts < 3`
+            )
+            .run(
+                applicationId,
+                windowEnd,
+                sourceVersionId,
+                token,
+                this.now() + 15 * 60_000,
+                this.now()
+            );
+        return result.changes ? token : null;
+    }
+
+    finishBaselineJob(
+        applicationId: string,
+        windowEnd: number,
+        token: string,
+        result: DailyBaselineResult
+    ) {
+        const updated = this.db
+            .prepare(
+                `UPDATE daily_baseline_jobs SET status = ?, result_json = ?, lease_until = ?
+            WHERE application_id = ? AND window_end = ? AND lease_token = ? AND status = 'running'`
+            )
+            .run(
+                result.status,
+                json(result),
+                result.status === 'failed' ? this.now() + 60_000 : 0,
+                applicationId,
+                windowEnd,
+                token
+            );
+        if (!updated.changes)
+            throw new VersionError(
+                'Daily baseline job lease is no longer owned.'
+            );
     }
 
     /** Run `fn` in one transaction; nested calls join the outer transaction. */
@@ -481,6 +665,34 @@ export class FlowStore {
         return average ? toPersonalVersion(row, average) : null;
     }
 
+    getPersonalBaselineId(
+        applicationId: string,
+        userId: string,
+        versionId: string
+    ): string | null {
+        const row = this.db
+            .prepare(
+                `WITH RECURSIVE lineage(id, parent_version_id) AS (
+            SELECT id, parent_version_id FROM personal_versions
+                WHERE application_id = ? AND user_id = ? AND id = ?
+            UNION
+            SELECT personal.id, personal.parent_version_id FROM personal_versions AS personal
+                JOIN lineage ON personal.id = lineage.parent_version_id
+                WHERE personal.application_id = ? AND personal.user_id = ?
+        ) SELECT baseline.id FROM lineage JOIN ui_versions AS baseline
+            ON baseline.id = lineage.parent_version_id AND baseline.application_id = ? LIMIT 1`
+            )
+            .get(
+                applicationId,
+                userId,
+                versionId,
+                applicationId,
+                userId,
+                applicationId
+            ) as { id: string } | undefined;
+        return row?.id ?? null;
+    }
+
     /** Commit an immutable version and activate it in the same transaction. */
     createVersion(input: {
         applicationId: string;
@@ -616,15 +828,22 @@ export class FlowStore {
 
     // ── telemetry ─────────────────────────────────────────────────────────────
 
-    insertEvents(events: TelemetryEvent[]): void {
-        if (events.length === 0) return;
-        this.transaction(() => {
+    insertEvents(events: TelemetryEvent[]): number {
+        if (events.length === 0) return 0;
+        return this.transaction(() => {
+            let accepted = 0;
+            const receipt = this.db.prepare(
+                'INSERT OR IGNORE INTO telemetry_receipts (application_id, event_id, created_at) VALUES (?, ?, ?)'
+            );
             const insert = this.db.prepare(
                 `INSERT INTO telemetry_events (application_id, version_id, session_id, user_id, component_id, capability_id,
            event_type, since_load_ms, metadata, seeded, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             );
             for (const e of events) {
+                const eventId = e.eventId ?? randomUUID();
+                if (!receipt.run(e.applicationId, eventId, e.createdAt).changes)
+                    continue;
                 insert.run(
                     e.applicationId,
                     e.versionId,
@@ -638,7 +857,11 @@ export class FlowStore {
                     e.seeded ? 1 : 0,
                     e.createdAt
                 );
+                accepted += 1;
+                if (!e.seeded || this.analyticsSampleKind === 'simulated')
+                    this.enqueueTelemetry('event', { ...e, eventId });
             }
+            return accepted;
         });
     }
 
@@ -696,27 +919,76 @@ export class FlowStore {
     }
 
     insertCall(call: CapabilityCall): void {
-        this.db
-            .prepare(
-                `INSERT INTO capability_calls (application_id, version_id, session_id, component_id, capability_id, kind,
+        this.transaction(() => {
+            this.db
+                .prepare(
+                    `INSERT INTO capability_calls (application_id, version_id, session_id, component_id, capability_id, kind,
            latency_ms, ok, error, trace_id, replay_id, seeded, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                )
+                .run(
+                    call.applicationId,
+                    call.versionId,
+                    call.sessionId,
+                    call.componentId,
+                    call.capabilityId,
+                    call.kind,
+                    call.latencyMs,
+                    call.ok ? 1 : 0,
+                    call.error,
+                    call.traceId,
+                    call.replayId,
+                    call.seeded ? 1 : 0,
+                    call.createdAt
+                );
+            if (!call.seeded || this.analyticsSampleKind === 'simulated')
+                this.enqueueTelemetry('call', call);
+        });
+    }
+
+    private enqueueTelemetry(
+        kind: TelemetryOutboxRecord['kind'],
+        payload: TelemetryEvent | CapabilityCall
+    ): void {
+        if (!this.options.analytics) return;
+        this.db
+            .prepare(
+                'INSERT INTO telemetry_outbox (id, application_id, kind, payload, created_at) VALUES (?, ?, ?, ?, ?)'
             )
             .run(
-                call.applicationId,
-                call.versionId,
-                call.sessionId,
-                call.componentId,
-                call.capabilityId,
-                call.kind,
-                call.latencyMs,
-                call.ok ? 1 : 0,
-                call.error,
-                call.traceId,
-                call.replayId,
-                call.seeded ? 1 : 0,
-                call.createdAt
+                randomUUID(),
+                payload.applicationId,
+                kind,
+                JSON.stringify(payload),
+                this.now()
             );
+    }
+
+    listTelemetryOutbox(
+        applicationId: string,
+        limit = 200
+    ): TelemetryOutboxRecord[] {
+        const rows = this.db
+            .prepare(
+                'SELECT * FROM telemetry_outbox WHERE application_id = ? ORDER BY created_at, rowid LIMIT ?'
+            )
+            .all(applicationId, Math.max(1, Math.min(500, limit))) as Row[];
+        return rows.map((row) => ({
+            id: row.id as string,
+            applicationId: row.application_id as string,
+            kind: row.kind as TelemetryOutboxRecord['kind'],
+            payload: JSON.parse(row.payload as string),
+            createdAt: Number(row.created_at),
+        }));
+    }
+
+    acknowledgeTelemetryOutbox(applicationId: string, ids: string[]): void {
+        this.transaction(() => {
+            const remove = this.db.prepare(
+                'DELETE FROM telemetry_outbox WHERE application_id = ? AND id = ?'
+            );
+            for (const id of ids) remove.run(applicationId, id);
+        });
     }
 
     /** Capability calls, newest first. Latency describes the backend, so it is not scoped to a UI version. */

@@ -1,0 +1,31 @@
+{
+    "name": "@flowjs/analytics",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "engines": {
+        "node": ">=24"
+    },
+    "scripts": {
+        "dev": "tsx watch --env-file-if-exists=../../.env.local src/index.ts",
+        "start": "tsx --env-file-if-exists=../../.env.local src/index.ts",
+        "migrate": "tsx --env-file-if-exists=../../.env.local src/migrate.ts",
+        "demo": "tsx --env-file-if-exists=../../.env.local src/demo.ts",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run",
+        "test:integration": "vitest run src/database.integration.test.ts"
+    },
+    "dependencies": {
+        "@flowjs/core": "workspace:*",
+        "fastify": "^5.6.0",
+        "pg": "^8.16.3",
+        "tsx": "^4.20.6",
+        "zod": "^4.6.5"
+    },
+    "devDependencies": {
+        "@types/node": "^24.13.5",
+        "@types/pg": "^8.15.5",
+        "typescript": "^5.9.3",
+        "vitest": "^5.0.1"
+    }
+}

@@ -7,8 +7,16 @@ import { aiMode, getRuntime, handle, sentryEnabled } from '@/server/flow';
 export async function GET(request: Request) {
     return handle(async () => {
         const runtime = getRuntime();
-        const { application, active, versions, layouts } = runtime.state();
         const userId = new URL(request.url).searchParams.get('userId');
+        const {
+            application,
+            active,
+            versions,
+            layouts,
+            baselineMode,
+            analyticsSampleKind,
+            baselineRun,
+        } = runtime.state(userId ?? undefined);
         const registration = await readFile(
             join(process.cwd(), 'src/demo/sales-app.ts'),
             'utf8'
@@ -22,16 +30,10 @@ export async function GET(request: Request) {
             graph: runtime.app.graph.edges,
             defaultState: runtime.app.defaultState(),
             active,
-            layouts: {
-                ...layouts,
-                personal: userId
-                    ? runtime.store.getLatestPersonalVersion(
-                          runtime.app.id,
-                          userId
-                      )
-                    : null,
-                selected: userId ? ('personal' as const) : ('average' as const),
-            },
+            baselineMode,
+            analyticsSampleKind,
+            baselineRun,
+            layouts,
             versions: versions.map(
                 ({
                     schema: _schema,

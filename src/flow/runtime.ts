@@ -30,6 +30,15 @@ import {
 } from './store';
 import { z } from 'zod';
 import { defaultLayoutTracks } from './layout-tracks';
+import {
+    AggregateEvidence,
+    DailyBaselineWindow,
+    NavigationPath,
+    aggregateReadiness,
+    analyticsSchemaHash,
+    latestBaselineWindow,
+} from './analytics';
+import type { DailyBaselineJob, DailyBaselineResult } from './store';
 
 /*
  * The adaptive loop: generate → observe → analyze → propose → validate →
@@ -57,9 +66,11 @@ export interface OptimizationAnalysis {
     latency: Metrics['latency'];
     score: MutationScore | null;
     decision: { autoApply: boolean; threshold: number | null };
+    aggregate?: AggregateEvidence;
 }
 
 export const IncomingEvent = z.object({
+    eventId: z.string().uuid().optional(),
     versionId: z.string().max(16),
     sessionId: z.string().min(1).max(64),
     userId: z.string().max(64).nullable().default(null),
@@ -168,6 +179,7 @@ export function createRuntime(deps: {
     recorded: FlowAIProvider;
     /** Skip live calls and replay recordings (the presentation fallback switch). */
     forceRecorded?: boolean;
+    dailyBaseline?: boolean;
     now?: () => number;
 }) {
     const { app, store, live, recorded } = deps;
@@ -243,18 +255,103 @@ export function createRuntime(deps: {
         return { version, metrics, findings };
     }
 
+    function validateAggregate(
+        evidence: AggregateEvidence,
+        version: VersionRecord
+    ) {
+        if ((evidence.sampleKind ?? 'live') !== store.analyticsSampleKind)
+            throw new RuntimeError(
+                'Simulated evidence cannot be used by a live analytics source.',
+                409
+            );
+        if (
+            evidence.applicationId !== app.id ||
+            evidence.sourceId !== store.telemetrySourceId
+        )
+            throw new RuntimeError(
+                'Aggregate evidence belongs to a different application or installation.',
+                409
+            );
+        if (
+            !DailyBaselineWindow.safeParse(evidence.window).success ||
+            evidence.window.to !== latestBaselineWindow(now()).to
+        )
+            throw new RuntimeError(
+                'Aggregate evidence must cover the latest completed baseline day.',
+                409
+            );
+        if (
+            evidence.versionId !== version.id ||
+            evidence.schemaHash !== analyticsSchemaHash(version.schema)
+        )
+            throw new RuntimeError(
+                'The baseline changed since this evidence was collected.',
+                409
+            );
+        if (
+            evidence.metrics.components.length !==
+                version.schema.components.length ||
+            evidence.metrics.components.some(
+                (metric) =>
+                    !version.schema.components.some(
+                        (component) =>
+                            component.id === metric.componentId &&
+                            component.capability === metric.capabilityId &&
+                            component.primitive === metric.primitive &&
+                            component.visible === metric.visible
+                    )
+            )
+        )
+            throw new RuntimeError(
+                'Aggregate component metrics do not match the baseline.',
+                409
+            );
+        if (
+            evidence.generatedAt > now() + 60_000 ||
+            now() - evidence.generatedAt > 15 * 60_000
+        )
+            throw new RuntimeError(
+                'Aggregate evidence has expired; collect a fresh snapshot.',
+                409
+            );
+    }
+
     return {
         app,
         store,
 
-        state() {
+        state(userId?: string) {
             const application = store.getApplication(app.id)!;
+            const active = store.getActiveVersion(app.id);
+            const personal = userId
+                ? store.getLatestPersonalVersion(app.id, userId)
+                : null;
+            const currentPersonal =
+                personal &&
+                userId &&
+                (!deps.dailyBaseline ||
+                    store.getPersonalBaselineId(app.id, userId, personal.id) ===
+                        active?.id)
+                    ? personal
+                    : null;
+            const baselineJob = deps.dailyBaseline
+                ? store.getBaselineJob(app.id, latestBaselineWindow(now()).to)
+                : null;
+            const baselineRunId =
+                baselineJob?.result?.runId ?? active?.optimizationRunId;
             return {
                 application,
-                active: store.getActiveVersion(app.id),
+                active,
                 versions: store.listVersions(app.id),
-                // Scaffold: persistence/user identity will make personal non-null.
-                layouts: defaultLayoutTracks(store.getActiveVersion(app.id)),
+                layouts: {
+                    ...defaultLayoutTracks(active),
+                    personal: currentPersonal,
+                },
+                baselineMode: deps.dailyBaseline
+                    ? ('daily' as const)
+                    : ('interactive' as const),
+                analyticsSampleKind: store.analyticsSampleKind,
+                baselineRun: baselineRunId ? store.getRun(baselineRunId) : null,
             };
         },
 
@@ -376,8 +473,14 @@ export function createRuntime(deps: {
             if (!userId || userId.length > 64)
                 throw new RuntimeError('A valid user id is required.');
             const average = activeVersion();
+            const personal = store.getLatestPersonalVersion(app.id, userId);
             const previous =
-                store.getLatestPersonalVersion(app.id, userId) ?? average;
+                personal &&
+                (!deps.dailyBaseline ||
+                    store.getPersonalBaselineId(app.id, userId, personal.id) ===
+                        average.id)
+                    ? personal
+                    : average;
             const metrics = computeMetrics({
                 versionId: previous.id,
                 schema: previous.schema,
@@ -432,6 +535,11 @@ export function createRuntime(deps: {
                         : validated;
                 }
             );
+            if (deps.dailyBaseline && activeVersion().id !== average.id)
+                throw new RuntimeError(
+                    'The baseline changed during personal generation. Refresh again.',
+                    409
+                );
             const version = store.createPersonalVersion({
                 applicationId: app.id,
                 userId,
@@ -444,15 +552,139 @@ export function createRuntime(deps: {
 
         analyze,
 
+        async publishDailyBaseline(input: unknown): Promise<DailyBaselineJob> {
+            const aggregate = AggregateEvidence.parse(input);
+            if (
+                aggregate.applicationId !== app.id ||
+                aggregate.sourceId !== store.telemetrySourceId ||
+                (aggregate.sampleKind ?? 'live') !== store.analyticsSampleKind
+            )
+                throw new RuntimeError(
+                    'Aggregate evidence belongs to a different application or installation.',
+                    409
+                );
+            const previous = store.getBaselineJob(app.id, aggregate.window.to);
+            if (
+                previous &&
+                previous.status !== 'running' &&
+                previous.status !== 'failed'
+            )
+                return previous;
+            const version = activeVersion();
+            validateAggregate(aggregate, version);
+            const token = store.claimBaselineJob(
+                app.id,
+                aggregate.window.to,
+                version.id
+            );
+            if (!token)
+                return store.getBaselineJob(app.id, aggregate.window.to)!;
+            try {
+                const reasons = aggregateReadiness(aggregate);
+                let result: DailyBaselineResult;
+                if (reasons.length) {
+                    result = {
+                        status: 'insufficient-data',
+                        runId: null,
+                        versionId: version.id,
+                        reasons,
+                    };
+                } else {
+                    const run = await this.optimize({ aggregate });
+                    return store.transaction(() => {
+                        if (
+                            run.aiSource === 'recorded' &&
+                            !deps.forceRecorded
+                        ) {
+                            store.setRunStatus(run.id, 'rejected');
+                            result = {
+                                status: 'rejected',
+                                runId: run.id,
+                                versionId: version.id,
+                                reasons: [
+                                    'A recorded fallback cannot automatically publish a daily baseline.',
+                                ],
+                            };
+                        } else if (run.status === 'auto') {
+                            result = {
+                                status: 'applied',
+                                runId: run.id,
+                                versionId: this.apply(run.id, 'auto').version
+                                    .id,
+                                reasons: [],
+                            };
+                        } else {
+                            result = {
+                                status:
+                                    run.status === 'no-change'
+                                        ? 'unchanged'
+                                        : run.status === 'pending'
+                                          ? 'pending'
+                                          : 'rejected',
+                                runId: run.id,
+                                versionId: version.id,
+                                reasons: run.errors,
+                            };
+                        }
+                        store.finishBaselineJob(
+                            app.id,
+                            aggregate.window.to,
+                            token,
+                            result
+                        );
+                        return store.getBaselineJob(
+                            app.id,
+                            aggregate.window.to
+                        )!;
+                    });
+                }
+                store.finishBaselineJob(
+                    app.id,
+                    aggregate.window.to,
+                    token,
+                    result
+                );
+                return store.getBaselineJob(app.id, aggregate.window.to)!;
+            } catch (error) {
+                store.finishBaselineJob(app.id, aggregate.window.to, token, {
+                    status: 'failed',
+                    runId: null,
+                    versionId: version.id,
+                    reasons: [
+                        error instanceof RuntimeError
+                            ? error.message
+                            : 'Daily baseline generation failed.',
+                    ],
+                });
+                throw error;
+            }
+        },
+
         /** Ask OpenAI for a finding and proposal, validate and score it. Never changes the UI. */
         async optimize(
-            options: { userId?: string } = {}
+            options: { userId?: string; aggregate?: AggregateEvidence } = {}
         ): Promise<OptimizationRun> {
-            const { version, metrics, findings } = analyze(
-                activeVersion(),
-                options.userId
-            );
-            if (metrics.totalInteractions === 0) {
+            if (deps.dailyBaseline && !options.aggregate)
+                throw new RuntimeError(
+                    'Shared baselines are generated by the daily analytics job.',
+                    409
+                );
+            const version = activeVersion();
+            const aggregate = options.aggregate
+                ? AggregateEvidence.parse(options.aggregate)
+                : undefined;
+            if (aggregate) validateAggregate(aggregate, version);
+            const metrics =
+                aggregate?.metrics ?? analyze(version, options.userId).metrics;
+            const findings = findFriction({
+                app,
+                schema: version.schema,
+                metrics,
+            });
+            if (
+                (aggregate?.population.interactions ??
+                    metrics.totalInteractions) === 0
+            ) {
                 throw new RuntimeError(
                     'No interactions recorded for this version yet. Use the dashboard first.',
                     409
@@ -463,6 +695,7 @@ export function createRuntime(deps: {
                 schema: version.schema,
                 metrics,
                 findings,
+                aggregate,
             });
             const { value: output, provenance } =
                 await withFallback<OptimizationOutput>(
@@ -483,10 +716,20 @@ export function createRuntime(deps: {
             const { mutations: proposed, ...aiAnalysis } = output;
             const candidate = proposed.map(toMutation);
             const sampleSize = {
-                sessions: metrics.sessions.total,
-                liveSessions: metrics.sessions.live,
-                seededSessions: metrics.sessions.seeded,
-                interactions: metrics.totalInteractions,
+                sessions:
+                    aggregate?.population.sessions ?? metrics.sessions.total,
+                liveSessions: aggregate
+                    ? aggregate.sampleKind === 'simulated'
+                        ? 0
+                        : aggregate.population.sessions
+                    : metrics.sessions.live,
+                seededSessions:
+                    aggregate?.sampleKind === 'simulated'
+                        ? aggregate.population.sessions
+                        : metrics.sessions.seeded,
+                interactions:
+                    aggregate?.population.interactions ??
+                    metrics.totalInteractions,
             };
             const rate = store.getApplication(app.id)!.mutationRate;
             const base = {
@@ -505,6 +748,7 @@ export function createRuntime(deps: {
                 latency: metrics.latency,
                 score,
                 decision,
+                ...(aggregate ? { aggregate } : {}),
             });
 
             if (candidate.length === 0) {
@@ -541,8 +785,8 @@ export function createRuntime(deps: {
             const score = scoreProposal({
                 expectedBenefit: output.expectedBenefit,
                 confidence: output.confidence,
-                sessions: metrics.sessions.total,
-                interactions: metrics.totalInteractions,
+                sessions: sampleSize.sessions,
+                interactions: sampleSize.interactions,
                 mutations: candidate as Mutation[],
                 recentVersions: store.countRecentActivations(
                     app.id,
@@ -618,7 +862,8 @@ export function createRuntime(deps: {
                     );
 
                 const analysis = run.analysis as OptimizationAnalysis;
-                const metrics = analyze(active).metrics;
+                const metrics =
+                    analysis.aggregate?.metrics ?? analyze(active).metrics;
                 const version = store.createVersion({
                     applicationId: app.id,
                     parentVersionId: active.id,
@@ -671,6 +916,19 @@ export function createRuntime(deps: {
                 const parsed = IncomingEvent.safeParse(item);
                 if (!parsed.success) continue;
                 const event = parsed.data;
+                if (
+                    event.componentId === '__navigation__' &&
+                    (![
+                        'menu_open',
+                        'menu_close',
+                        'menu_select',
+                        'tab_select',
+                        'active_time',
+                    ].includes(event.eventType) ||
+                        !NavigationPath.min(1).safeParse(event.metadata.path)
+                            .success)
+                )
+                    continue;
                 if (!schemas.has(event.versionId)) {
                     const version =
                         store.getVersion(app.id, event.versionId) ??
@@ -683,12 +941,19 @@ export function createRuntime(deps: {
                             : null);
                     schemas.set(
                         event.versionId,
-                        new Map(
-                            version?.schema.components.map((c) => [
-                                c.id,
-                                c.capability,
-                            ]) ?? []
-                        )
+                        new Map([
+                            ...(version?.schema.components.map(
+                                (c) => [c.id, c.capability] as [string, string]
+                            ) ?? []),
+                            ...(version
+                                ? [
+                                      ['__navigation__', '__navigation__'] as [
+                                          string,
+                                          string,
+                                      ],
+                                  ]
+                                : []),
+                        ])
                     );
                 }
                 const capabilityId = schemas
@@ -697,6 +962,7 @@ export function createRuntime(deps: {
                 if (!capabilityId) continue;
                 const received = now();
                 accepted.push({
+                    eventId: event.eventId,
                     applicationId: app.id,
                     versionId: event.versionId,
                     sessionId: event.sessionId,

@@ -1,6 +1,7 @@
 'use client';
 
 import type { MetricsResponse } from '@flowjs/core/client/api';
+import type { AggregateEvidence } from '@flowjs/core/flow/analytics';
 import { describeLatency } from '@flowjs/core/flow/friction';
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
@@ -9,6 +10,7 @@ const secs = (ms: number | null) =>
 
 export function TelemetryPanel(props: {
     data: MetricsResponse | null;
+    aggregate?: AggregateEvidence;
     onSeed: () => void;
     onClearSeeded: () => void;
     busy: boolean;
@@ -32,6 +34,43 @@ export function TelemetryPanel(props: {
 
     return (
         <div className="telemetry">
+            {props.aggregate && (
+                <section
+                    className="evidence__section"
+                    aria-label="Aggregate baseline evidence"
+                >
+                    <h4>Aggregate baseline evidence</h4>
+                    <p>
+                        {props.aggregate.sampleKind === 'simulated'
+                            ? 'Simulated cohort'
+                            : 'Live cohort'}
+                        {' · '}
+                        {props.aggregate.population.users} browsers
+                        {' · '}
+                        {props.aggregate.population.sessions} sessions
+                        {' · '}
+                        {props.aggregate.population.interactions} interactions
+                    </p>
+                    <p className="muted">
+                        {new Date(props.aggregate.window.from)
+                            .toISOString()
+                            .slice(0, 10)}{' '}
+                        UTC
+                        {' · Source layout '}
+                        {props.aggregate.versionId}
+                        {' · Tiger Data'}
+                    </p>
+                    <ul className="findings">
+                        {props.aggregate.insights
+                            .slice(0, 5)
+                            .map((insight, index) => (
+                                <li key={`${insight.kind}:${index}`}>
+                                    <p>{insight.summary}</p>
+                                </li>
+                            ))}
+                    </ul>
+                </section>
+            )}
             <section className="telemetry__sessions">
                 <p>
                     <strong>{metrics.sessions.total}</strong> session

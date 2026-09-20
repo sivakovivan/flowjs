@@ -3,6 +3,7 @@ import './flow-menu.css';
 
 import { useEffect, useRef, useState } from 'react';
 import { MenuGlass } from './MenuGlass';
+import { tracker } from '@flowjs/core/client/telemetry';
 import {
     api,
     type StudioState,
@@ -55,10 +56,26 @@ export function FlowMenu({
     const root = useRef<HTMLDivElement>(null);
     const launcher = useRef<HTMLButtonElement>(null);
     const panel = useRef<HTMLDivElement>(null);
+    const selected = useRef(false);
     const active = studio.active!;
-    function close() {
+    const menuPath = (name: 'actions' | 'history' | 'customize') =>
+        name === 'actions' ? ['controls'] : ['controls', name];
+    function open(next: 'actions' | 'history' | 'customize') {
+        if (view && !selected.current)
+            tracker.navigation(
+                next === 'actions' ? 'menu_close' : 'menu_select',
+                menuPath(view)
+            );
+        tracker.navigation('menu_open', menuPath(next));
+        selected.current = false;
+        setView(next);
+    }
+    function close(restoreFocus = true) {
+        if (view && !selected.current)
+            tracker.navigation('menu_close', menuPath(view));
+        selected.current = false;
         setView(null);
-        launcher.current?.focus();
+        if (restoreFocus) launcher.current?.focus();
     }
     useEffect(() => {
         if (!view) return;
@@ -66,7 +83,7 @@ export function FlowMenu({
             ?.querySelector<HTMLElement>('button:not(:disabled), textarea')
             ?.focus();
         const outside = (event: PointerEvent) => {
-            if (!root.current?.contains(event.target as Node)) setView(null);
+            if (!root.current?.contains(event.target as Node)) close(false);
         };
         document.addEventListener('pointerdown', outside);
         return () => document.removeEventListener('pointerdown', outside);
@@ -76,6 +93,8 @@ export function FlowMenu({
         id?: string
     ) {
         if (busy) return;
+        tracker.navigation('menu_select', menuPath(view ?? 'actions'));
+        selected.current = true;
         setBusy(true);
         setError('');
         try {
@@ -154,9 +173,7 @@ export function FlowMenu({
                         <button
                             className="flow-menu__back"
                             onClick={() =>
-                                view === 'actions'
-                                    ? close()
-                                    : setView('actions')
+                                view === 'actions' ? close() : open('actions')
                             }
                             aria-label={
                                 view === 'actions'
@@ -206,14 +223,14 @@ export function FlowMenu({
                             </button>
                             <button
                                 disabled={busy}
-                                onClick={() => setView('history')}
+                                onClick={() => open('history')}
                             >
                                 <Icon name="history" />
                                 Version history<span aria-hidden="true">›</span>
                             </button>
                             <button
                                 disabled={busy}
-                                onClick={() => setView('customize')}
+                                onClick={() => open('customize')}
                             >
                                 <Icon name="customize" />
                                 Customize<span aria-hidden="true">›</span>
@@ -287,7 +304,7 @@ export function FlowMenu({
                 aria-controls="flow-actions"
                 aria-haspopup="dialog"
                 aria-busy={regenerating}
-                onClick={() => (view ? close() : setView('actions'))}
+                onClick={() => (view ? close() : open('actions'))}
             >
                 <MenuGlass circle />
                 <svg

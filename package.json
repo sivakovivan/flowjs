@@ -9,6 +9,7 @@
         "./flow/*": "./src/flow/*.ts",
         "./client/*": "./src/client/*.ts",
         "./server/capabilities": "./src/server/capabilities.ts",
+        "./server/analytics": "./src/server/analytics.ts",
         "./server/http": "./src/server/http.ts",
         "./components/studio/FlowStudio": "./src/components/studio/FlowStudio.tsx",
         "./components/renderer/Dashboard": "./src/components/renderer/Dashboard.tsx"
@@ -26,7 +27,11 @@
         "test": "vitest run",
         "test:watch": "vitest",
         "db:reset": "node scripts/db-reset.mjs",
-        "test:e2e": "pnpm --dir apps/demo test:e2e"
+        "test:e2e": "pnpm --dir apps/demo test:e2e",
+        "analytics": "pnpm --dir apps/analytics start",
+        "analytics:migrate": "pnpm --dir apps/analytics migrate",
+        "demo:aggregate": "pnpm --dir apps/analytics demo",
+        "test:analytics": "pnpm --dir apps/analytics test"
     },
     "dependencies": {
         "@samasante/liquid-glass": "0.1.1",

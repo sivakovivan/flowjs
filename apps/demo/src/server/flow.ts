@@ -24,8 +24,17 @@ export const aiMode = () => ({
 
 export function getRuntime(): FlowRuntime {
     if (!globalForFlow.flowRuntime) {
+        const dailyBaseline = process.env.FLOW_ANALYTICS_ENABLED === '1';
         const store = new FlowStore(
-            process.env.FLOW_DB_PATH || '.flow/flow.db'
+            process.env.FLOW_DB_PATH || '.flow/flow.db',
+            Date.now,
+            {
+                analytics: dailyBaseline,
+                analyticsSampleKind:
+                    process.env.FLOW_ANALYTICS_SAMPLE_KIND === 'simulated'
+                        ? 'simulated'
+                        : 'live',
+            }
         );
         const apiKey = process.env.OPENAI_API_KEY;
         globalForFlow.flowRuntime = createRuntime({
@@ -39,6 +48,7 @@ export function getRuntime(): FlowRuntime {
                 : null,
             recorded: createRecordedProvider(salesApp, salesRecording),
             forceRecorded: process.env.FLOW_AI_MODE === 'recorded',
+            dailyBaseline,
         });
     }
     return globalForFlow.flowRuntime;

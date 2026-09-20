@@ -11,6 +11,7 @@ next-env.d.ts
 .env
 .env.local
 .env*.local
+/openai.txt
 
 .DS_Store
 

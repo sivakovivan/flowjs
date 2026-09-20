@@ -546,6 +546,7 @@ pre {
 
 .layout-change-notice__copy {
     display: grid;
+    flex: 1;
     gap: 2px;
 }
 
@@ -558,6 +559,28 @@ pre {
     font-size: 12px;
     font-weight: 450;
     line-height: 1.35;
+}
+
+.layout-change-notice__close {
+    display: grid;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 auto;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: color-mix(in srgb, var(--app-fg) 62%, transparent);
+    font: inherit;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.layout-change-notice__close:hover {
+    background: color-mix(in srgb, var(--app-primary) 10%, transparent);
+    color: var(--app-fg);
 }
 
 @keyframes layout-change-pop {

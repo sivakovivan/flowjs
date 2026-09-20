@@ -263,4 +263,12 @@ test('refresh keeps the layout and the regenerate button visibly changes it', as
 
     expect(secondLabel).not.toBe(firstLabel);
     expect(secondOrder).not.toEqual(firstOrder);
+
+    // The rationale is persistent and leaves only when the user dismisses it.
+    await page.waitForTimeout(6_100);
+    await expect(page.locator('.layout-change-notice')).toBeVisible();
+    await page
+        .getByRole('button', { name: 'Dismiss layout rationale' })
+        .click();
+    await expect(page.locator('.layout-change-notice')).toBeHidden();
 });

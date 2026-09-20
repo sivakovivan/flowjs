@@ -214,8 +214,6 @@ export function FlowStudio({
             });
             setTimeout(() => {
                 setChanges({});
-                setLayoutChangeNotice(null);
-                setLayoutChangeRationale(null);
             }, HIGHLIGHT_MS);
         } catch (error) {
             const message =
@@ -522,6 +520,19 @@ export function FlowStudio({
                                             </small>
                                         )}
                                     </div>
+                                    {layoutChangeRationale && (
+                                        <button
+                                            type="button"
+                                            className="layout-change-notice__close"
+                                            aria-label="Dismiss layout rationale"
+                                            onClick={() => {
+                                                setLayoutChangeNotice(null);
+                                                setLayoutChangeRationale(null);
+                                            }}
+                                        >
+                                            ×
+                                        </button>
+                                    )}
                                 </div>
                             )}
                             <div className="stage__meta">
@@ -529,8 +540,10 @@ export function FlowStudio({
                                     {layoutTrack === 'average'
                                         ? 'Average layout'
                                         : 'Personal layout'}{' '}
-                                    · {displayedVersion.id}:{' '}
-                                    {displayedVersion.reason}
+                                    · {displayedVersion.id}
+                                    {developerMode
+                                        ? `: ${displayedVersion.reason}`
+                                        : ''}
                                 </p>
                                 <div
                                     className="layout-track-toggle"

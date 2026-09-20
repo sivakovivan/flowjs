@@ -227,6 +227,9 @@ export function FlowStudio({
                         layouts: { ...layouts, personal: nextPersonal },
                     };
                 });
+                // Reconcile after both refresh passes so an aggregate
+                // refresh cannot overwrite the newly persisted personal version.
+                await refreshState();
             }
         });
     }, [notify, studio?.active, transitionTo]);

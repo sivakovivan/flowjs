@@ -6,7 +6,10 @@ import {
 } from './layout-tracks';
 import type { VersionRecord } from './store';
 
-const average = { id: 'v1' } as VersionRecord;
+const average = {
+    id: 'v1',
+    schema: { components: [] },
+} as VersionRecord;
 
 describe('layout tracks', () => {
     it('defaults a new user to the aggregate average layout', () => {

@@ -78,8 +78,13 @@ function demoPersonalSchema(
     userId: string,
     refreshCount: number
 ) {
-    const average = runtime.store.getActiveVersion(runtime.app.id)!.schema;
-    const events = runtime.store.listEvents(runtime.app.id, average.id, userId);
+    const averageVersion = runtime.store.getActiveVersion(runtime.app.id)!;
+    const average = averageVersion.schema;
+    const events = runtime.store.listEvents(
+        runtime.app.id,
+        averageVersion.id,
+        userId
+    );
     const shift =
         Math.max(events.length, refreshCount) %
         Math.max(1, average.components.length);

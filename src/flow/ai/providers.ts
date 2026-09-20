@@ -6,8 +6,10 @@ import type { UISchema } from '../schema';
 import {
     GENERATION_INSTRUCTIONS,
     OPTIMIZATION_INSTRUCTIONS,
+    PERSONALIZATION_INSTRUCTIONS,
     type GenerationBrief,
     type OptimizationBrief,
+    type PersonalizationBrief,
 } from './briefs';
 import {
     GeneratedSchemaOutput,
@@ -19,6 +21,7 @@ export interface FlowAIProvider {
     source: 'live' | 'recorded';
     model: string;
     generateSchema(brief: GenerationBrief): Promise<unknown>;
+    generatePersonalSchema(brief: PersonalizationBrief): Promise<unknown>;
     proposeOptimization(brief: OptimizationBrief): Promise<unknown>;
 }
 
@@ -62,6 +65,12 @@ export function createOpenAIProvider(options: {
                 brief,
                 zodTextFormat(GeneratedSchemaOutput, 'flow_ui_schema')
             ),
+        generatePersonalSchema: (brief) =>
+            call(
+                PERSONALIZATION_INSTRUCTIONS,
+                brief,
+                zodTextFormat(GeneratedSchemaOutput, 'flow_personal_ui_schema')
+            ),
         proposeOptimization: (brief) =>
             call(
                 OPTIMIZATION_INSTRUCTIONS,
@@ -95,6 +104,13 @@ export function createRecordedProvider(
         source: 'recorded',
         model: 'recorded',
         async generateSchema() {
+            if (!recording)
+                throw new Error(
+                    `No recorded responses for application "${app.id}".`
+                );
+            return structuredClone(recording.generation);
+        },
+        async generatePersonalSchema() {
             if (!recording)
                 throw new Error(
                     `No recorded responses for application "${app.id}".`

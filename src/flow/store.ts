@@ -250,6 +250,26 @@ function toVersion(row: Row): VersionRecord {
     };
 }
 
+function toPersonalVersion(row: Row, parent: VersionRecord): VersionRecord {
+    return {
+        ...parent,
+        id: row.id as string,
+        parentVersionId: row.parent_version_id as string,
+        schema: parse(row.config_json, { components: [] }),
+        mutations: [],
+        reason: row.reason as string,
+        evidence: {
+            scope: 'personal',
+            userId: row.user_id as string,
+        },
+        telemetrySnapshot: null,
+        source: 'generated',
+        aiSource: null,
+        optimizationRunId: null,
+        createdAt: Number(row.created_at),
+    };
+}
+
 function toRun(row: Row): OptimizationRun {
     return {
         id: row.id as string,
@@ -390,10 +410,13 @@ export class FlowStore {
         schema: UISchema;
         reason: string;
     }): VersionRecord {
-        const parent = this.getVersion(
-            input.applicationId,
-            input.parentVersionId
-        );
+        const parent =
+            this.getVersion(input.applicationId, input.parentVersionId) ??
+            this.getPersonalVersion(
+                input.applicationId,
+                input.userId,
+                input.parentVersionId
+            );
         if (!parent)
             throw new VersionError(
                 `Parent version "${input.parentVersionId}" does not exist.`
@@ -423,6 +446,39 @@ export class FlowStore {
             evidence: { scope: 'personal', userId: input.userId },
             createdAt: this.now(),
         };
+    }
+
+    getPersonalVersion(
+        applicationId: string,
+        userId: string,
+        id: string
+    ): VersionRecord | null {
+        const row = this.db
+            .prepare(
+                'SELECT * FROM personal_versions WHERE application_id = ? AND user_id = ? AND id = ?'
+            )
+            .get(applicationId, userId, id) as Row | undefined;
+        if (!row) return null;
+        const average = this.getVersion(
+            applicationId,
+            row.parent_version_id as string
+        );
+        const fallback = average ?? this.getActiveVersion(applicationId);
+        return fallback ? toPersonalVersion(row, fallback) : null;
+    }
+
+    getLatestPersonalVersion(
+        applicationId: string,
+        userId: string
+    ): VersionRecord | null {
+        const row = this.db
+            .prepare(
+                'SELECT * FROM personal_versions WHERE application_id = ? AND user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1'
+            )
+            .get(applicationId, userId) as Row | undefined;
+        if (!row) return null;
+        const average = this.getActiveVersion(applicationId);
+        return average ? toPersonalVersion(row, average) : null;
     }
 
     /** Commit an immutable version and activate it in the same transaction. */
@@ -602,6 +658,28 @@ export class FlowStore {
                     ? [applicationId, versionId, userId]
                     : [applicationId, versionId])
             ) as Row[];
+        return rows.map((row) => ({
+            applicationId: row.application_id as string,
+            versionId: row.version_id as string,
+            sessionId: row.session_id as string,
+            userId: (row.user_id as string | null) ?? null,
+            componentId: row.component_id as string,
+            capabilityId: row.capability_id as string,
+            eventType: row.event_type as TelemetryEventType,
+            sinceLoadMs: Number(row.since_load_ms),
+            metadata: parse(row.metadata, {}),
+            seeded: Number(row.seeded) === 1,
+            createdAt: Number(row.created_at),
+        }));
+    }
+
+    /** All live evidence accumulated by one user across average and personal versions. */
+    listUserEvents(applicationId: string, userId: string): TelemetryEvent[] {
+        const rows = this.db
+            .prepare(
+                'SELECT * FROM telemetry_events WHERE application_id = ? AND user_id = ? ORDER BY created_at, id'
+            )
+            .all(applicationId, userId) as Row[];
         return rows.map((row) => ({
             applicationId: row.application_id as string,
             versionId: row.version_id as string,

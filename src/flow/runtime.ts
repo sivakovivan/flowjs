@@ -11,7 +11,7 @@ import { computeMetrics, type Metrics } from './metrics';
 import { applyMutations, type Mutation } from './mutations';
 import { seedSessions } from './seed';
 import type { FlowApp } from './registry';
-import { validateSchema, type UISchema } from './schema';
+import { normalizeOrder, validateSchema, type UISchema } from './schema';
 import { decideAutoApply, scoreProposal, type MutationScore } from './scoring';
 import {
     FlowStore,
@@ -67,6 +67,41 @@ export type IncomingEvent = z.input<typeof IncomingEvent>;
 
 /** Client clocks are trusted only within this skew. */
 const MAX_CLOCK_SKEW_MS = 10 * 60_000;
+
+function layoutSignature(schema: UISchema): string {
+    return JSON.stringify(
+        normalizeOrder(schema).components.map(
+            ({ id, primitive, size, order, visible }) => ({
+                id,
+                primitive,
+                size,
+                order,
+                visible,
+            })
+        )
+    );
+}
+
+/** Last-resort invariant: even a conservative/replayed model response becomes a new layout. */
+function ensureLayoutChanged(schema: UISchema, previous: UISchema): UISchema {
+    const normalized = normalizeOrder(schema);
+    if (layoutSignature(normalized) !== layoutSignature(previous))
+        return normalized;
+    const components = [...normalized.components];
+    if (components.length > 1) {
+        components.push(components.shift()!);
+        return {
+            components: components.map((component, order) => ({
+                ...component,
+                order,
+            })),
+        };
+    }
+    const only = components[0];
+    const sizes = ['small', 'medium', 'large', 'full'] as const;
+    const nextSize = sizes[(sizes.indexOf(only.size) + 1) % sizes.length];
+    return { components: [{ ...only, size: nextSize, order: 0 }] };
+}
 
 export class RuntimeError extends Error {
     constructor(
@@ -288,6 +323,79 @@ export function createRuntime(deps: {
                 source: 'generated',
                 aiSource: provenance.source,
                 cause: 'generate',
+            });
+            return { version, provenance };
+        },
+
+        /** Regenerate a complete personal schema from this user's evidence on every refresh. */
+        async regeneratePersonal(userId: string): Promise<{
+            version: VersionRecord;
+            provenance: AIProvenance;
+        }> {
+            if (!userId || userId.length > 64)
+                throw new RuntimeError('A valid user id is required.');
+            const average = activeVersion();
+            const previous =
+                store.getLatestPersonalVersion(app.id, userId) ?? average;
+            const metrics = computeMetrics({
+                versionId: previous.id,
+                schema: previous.schema,
+                events: store.listUserEvents(app.id, userId),
+                calls: store.listCalls(app.id),
+            });
+            const findings = findFriction({
+                app,
+                schema: previous.schema,
+                metrics,
+            });
+            const brief = {
+                ...optimizationBrief({
+                    app,
+                    schema: previous.schema,
+                    metrics,
+                    findings,
+                }),
+                previousPersonalVersionId:
+                    previous.id === average.id ? null : previous.id,
+                refreshInstruction:
+                    'Create a complete new personal layout for this refresh. A material layout change is mandatory even with sparse evidence.',
+            };
+            const { value, provenance } = await withFallback<{
+                schema: UISchema;
+                reasoning: string;
+            }>(
+                (provider) => provider.generatePersonalSchema(brief),
+                (output) => {
+                    const parsed = GeneratedSchemaOutput.safeParse(output);
+                    if (!parsed.success)
+                        return {
+                            ok: false,
+                            errors: parsed.error.issues.map((i) => i.message),
+                        };
+                    const validated = validateSchema(
+                        toUISchema(parsed.data),
+                        app
+                    );
+                    return validated.ok
+                        ? {
+                              ok: true,
+                              value: {
+                                  schema: ensureLayoutChanged(
+                                      validated.schema,
+                                      previous.schema
+                                  ),
+                                  reasoning: parsed.data.reasoning,
+                              },
+                          }
+                        : validated;
+                }
+            );
+            const version = store.createPersonalVersion({
+                applicationId: app.id,
+                userId,
+                parentVersionId: previous.id,
+                schema: value.schema,
+                reason: `Personal layout regenerated: ${value.reasoning}`,
             });
             return { version, provenance };
         },
@@ -522,7 +630,15 @@ export function createRuntime(deps: {
                 if (!parsed.success) continue;
                 const event = parsed.data;
                 if (!schemas.has(event.versionId)) {
-                    const version = store.getVersion(app.id, event.versionId);
+                    const version =
+                        store.getVersion(app.id, event.versionId) ??
+                        (event.userId
+                            ? store.getPersonalVersion(
+                                  app.id,
+                                  event.userId,
+                                  event.versionId
+                              )
+                            : null);
                     schemas.set(
                         event.versionId,
                         new Map(

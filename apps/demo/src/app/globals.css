@@ -132,6 +132,27 @@ pre {
     min-height: 100vh;
 }
 
+.studio--loading {
+    display: grid;
+    place-content: center;
+    gap: 12px;
+    background: var(--paper);
+}
+
+.studio--loading::before {
+    content: 'Planning your personal layout…';
+    color: var(--ink-soft);
+    font-size: 18px;
+}
+
+.studio--personal-error {
+    text-align: center;
+}
+
+.studio--personal-error::before {
+    content: none;
+}
+
 .bar {
     position: sticky;
     top: 0;

@@ -4,10 +4,11 @@ import { compatiblePrimitives } from '@flowjs/core/flow/primitives';
 import { aiMode, getRuntime, handle, sentryEnabled } from '@/server/flow';
 
 /** Everything the client needs to render: capabilities, tracks, active version, history. */
-export async function GET() {
+export async function GET(request: Request) {
     return handle(async () => {
         const runtime = getRuntime();
-        const { application, active, versions } = runtime.state();
+        const { application, active, versions, layouts } = runtime.state();
+        const userId = new URL(request.url).searchParams.get('userId');
         const registration = await readFile(
             join(process.cwd(), 'src/demo/sales-app.ts'),
             'utf8'
@@ -21,6 +22,16 @@ export async function GET() {
             graph: runtime.app.graph.edges,
             defaultState: runtime.app.defaultState(),
             active,
+            layouts: {
+                ...layouts,
+                personal: userId
+                    ? runtime.store.getLatestPersonalVersion(
+                          runtime.app.id,
+                          userId
+                      )
+                    : null,
+                selected: userId ? ('personal' as const) : ('average' as const),
+            },
             versions: versions.map(
                 ({
                     schema: _schema,

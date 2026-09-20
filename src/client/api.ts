@@ -81,7 +81,11 @@ async function request<T>(
 }
 
 export const api = {
-    state: () => request<StudioState>('GET', '/state'),
+    state: (userId?: string) =>
+        request<StudioState>(
+            'GET',
+            `/state${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`
+        ),
     generate: (userRequest?: string) =>
         request<{ version: VersionRecord; provenance: AIProvenance | null }>(
             'POST',
@@ -96,12 +100,12 @@ export const api = {
             version: VersionRecord | null;
             applied: boolean;
         }>('POST', '/refresh'),
-    refreshPersonal: (userId: string, refreshCount: number) =>
+    refreshPersonal: (userId: string) =>
         request<{
-            run: OptimizationRun | null;
-            version: VersionRecord | null;
-            applied: boolean;
-        }>('POST', '/personal-refresh', { userId, refreshCount }),
+            version: VersionRecord;
+            provenance: AIProvenance;
+            applied: true;
+        }>('POST', '/personal-refresh', { userId }),
     apply: (runId: string, mode: 'auto' | 'manual') =>
         request<{ version: VersionRecord; run: OptimizationRun }>(
             'POST',

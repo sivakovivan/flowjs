@@ -38,6 +38,28 @@ const AUTO_APPLY_DELAY_S = 3;
 const METRICS_POLL_MS = 4_000;
 const HIGHLIGHT_MS = 6_000;
 
+function summarizeChanges(changes: Record<string, ComponentChange[]>): string {
+    const counts = Object.values(changes)
+        .flat()
+        .reduce<Partial<Record<ComponentChange, number>>>((result, change) => {
+            result[change] = (result[change] ?? 0) + 1;
+            return result;
+        }, {});
+    const labels: Array<[ComponentChange, string]> = [
+        ['moved', 'moved'],
+        ['resized', 'resized'],
+        ['swapped', 'changed control'],
+        ['shown', 'shown'],
+        ['hidden', 'hidden'],
+    ];
+    const details = labels
+        .filter(([change]) => counts[change])
+        .map(([change, label]) => `${counts[change]} ${label}`);
+    return details.length
+        ? `Your layout was refreshed · ${details.join(', ')}`
+        : 'Your layout was refreshed';
+}
+
 function themeStyle(theme: StudioState['application']['theme']): CSSProperties {
     return {
         '--app-primary': theme.primary,
@@ -66,6 +88,9 @@ export function FlowStudio({
     const [countdown, setCountdown] = useState<number | null>(null);
     const [changes, setChanges] = useState<Record<string, ComponentChange[]>>(
         {}
+    );
+    const [layoutChangeNotice, setLayoutChangeNotice] = useState<string | null>(
+        null
     );
     const [tab, setTab] = useState<Tab>('telemetry');
     const [historyOpen, setHistoryOpen] = useState(false);
@@ -159,6 +184,17 @@ export function FlowStudio({
         setPersonalizeError(null);
         api.refreshPersonal(tracker.userId).then(
             ({ version }) => {
+                const previous =
+                    studio.layouts?.personal ?? studio.layouts?.average;
+                const personalChanges = previous
+                    ? diffSchemas(previous.schema, version.schema)
+                    : {};
+                setChanges(personalChanges);
+                setLayoutChangeNotice(summarizeChanges(personalChanges));
+                setTimeout(() => {
+                    setChanges({});
+                    setLayoutChangeNotice(null);
+                }, HIGHLIGHT_MS);
                 setLayoutTrack('personal');
                 setStudio((current) => {
                     if (!current) return null;
@@ -477,6 +513,15 @@ export function FlowStudio({
                             style={themeStyle(studio.application.theme)}
                             aria-label={`${studio.application.name} dashboard`}
                         >
+                            {layoutChangeNotice && (
+                                <div
+                                    className="layout-change-notice"
+                                    role="status"
+                                >
+                                    <span aria-hidden="true">↗</span>
+                                    {layoutChangeNotice}
+                                </div>
+                            )}
                             <div className="stage__meta">
                                 <p>
                                     {layoutTrack === 'average'

@@ -194,6 +194,10 @@ test('every user refresh creates and displays a changed personal version', async
 
     await page.reload();
     await expect(page.getByText(/^Personal layout · p/)).toBeVisible();
+    await expect(page.locator('.layout-change-notice')).toContainText(
+        'Your layout was refreshed'
+    );
+    await expect(page.locator('.change-tag')).not.toHaveCount(0);
     const secondLabel = await page.locator('.stage__meta p').innerText();
     const secondOrder = await page
         .locator('[data-component]')

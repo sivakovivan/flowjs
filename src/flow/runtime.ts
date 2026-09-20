@@ -23,6 +23,7 @@ import {
     type VersionRecord,
 } from './store';
 import { z } from 'zod';
+import { defaultLayoutTracks } from './layout-tracks';
 
 /*
  * The adaptive loop: generate → observe → analyze → propose → validate →
@@ -173,6 +174,8 @@ export function createRuntime(deps: {
                 application,
                 active: store.getActiveVersion(app.id),
                 versions: store.listVersions(app.id),
+                // Scaffold: persistence/user identity will make personal non-null.
+                layouts: defaultLayoutTracks(store.getActiveVersion(app.id)),
             };
         },
 

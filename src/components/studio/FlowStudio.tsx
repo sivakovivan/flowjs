@@ -27,6 +27,8 @@ import { HistoryMenu } from './HistoryMenu';
 import { SourceBadge } from './SourceBadge';
 import { TelemetryPanel } from './TelemetryPanel';
 import { CustomizationChat } from './CustomizationChat';
+import type { LayoutTrack } from '@flowjs/core/flow/layout-tracks';
+import { defaultLayoutTracks } from '@flowjs/core/flow/layout-tracks';
 
 type Tab = 'evidence' | 'telemetry' | 'capabilities';
 
@@ -68,6 +70,7 @@ export function FlowStudio({
     const [operationsOpen, setOperationsOpen] = useState(false);
     const [rate, setRate] = useState(0.5);
     const [busy, setBusy] = useState(false);
+    const [layoutTrack, setLayoutTrack] = useState<LayoutTrack>('average');
     const [notices, setNotices] = useState<Notice[]>([]);
     const noticeId = useRef(0);
     const userToolsRef = useRef<HTMLDivElement>(null);
@@ -98,9 +101,13 @@ export function FlowStudio({
 
     const refreshState = useCallback(async () => {
         const next = await api.state();
-        setStudio(next);
-        setRate(next.application.mutationRate);
-        return next;
+        // Keep clients compatible with an older API process during rolling deploys.
+        const layouts = next.layouts ?? defaultLayoutTracks(next.active);
+        const normalized = { ...next, layouts };
+        setStudio(normalized);
+        setLayoutTrack(layouts.selected);
+        setRate(normalized.application.mutationRate);
+        return normalized;
     }, []);
 
     const refreshMetrics = useCallback(async () => {
@@ -116,6 +123,10 @@ export function FlowStudio({
     }, [refreshState]);
 
     const activeId = studio?.active?.id ?? null;
+    const displayedVersion =
+        layoutTrack === 'personal'
+            ? (studio?.layouts?.personal ?? studio?.layouts?.average)
+            : studio?.layouts?.average;
     useEffect(() => {
         if (!activeId) return;
         refreshMetrics();
@@ -142,6 +153,31 @@ export function FlowStudio({
         },
         [refreshMetrics, refreshState, studio?.active]
     );
+
+    // Run one adaptive pass per version per browser session. A 409 simply means
+    // this is a new dashboard with no usage data yet; it should not block render.
+    useEffect(() => {
+        if (!studio?.active || typeof window === 'undefined') return;
+        const key = `flowjs:refresh-optimization:${studio.active.id}`;
+        if (sessionStorage.getItem(key)) return;
+        api.refreshOptimize()
+            .then(async (result) => {
+                // Only suppress subsequent refreshes after the server completed
+                // an optimization pass. A 409/no-data response must be retryable
+                // after the user creates more telemetry.
+                sessionStorage.setItem(key, 'completed');
+                if (result.applied && result.version) {
+                    await transitionTo(result.version);
+                    notify(
+                        'ok',
+                        `Applied ${result.version.id} from recent usage.`
+                    );
+                }
+            })
+            .catch(() => {
+                // Optimization is opportunistic on refresh; normal rendering wins.
+            });
+    }, [notify, studio?.active, transitionTo]);
 
     async function generate() {
         setGenerating(true);
@@ -406,7 +442,7 @@ export function FlowStudio({
                     )}
                 </header>
 
-                {!active ? (
+                {!displayedVersion ? (
                     <GeneratePrompt
                         studio={studio}
                         generating={generating}
@@ -422,9 +458,44 @@ export function FlowStudio({
                         >
                             <div className="stage__meta">
                                 <p>
-                                    Generated interface, {active.id}:{' '}
-                                    {active.reason}
+                                    {layoutTrack === 'average'
+                                        ? 'Average layout'
+                                        : 'Personal layout'}{' '}
+                                    · {displayedVersion.id}:{' '}
+                                    {displayedVersion.reason}
                                 </p>
+                                <div
+                                    className="layout-track-toggle"
+                                    role="group"
+                                    aria-label="Layout version"
+                                >
+                                    <button
+                                        type="button"
+                                        className={
+                                            layoutTrack === 'average'
+                                                ? 'is-active'
+                                                : undefined
+                                        }
+                                        onClick={() =>
+                                            setLayoutTrack('average')
+                                        }
+                                    >
+                                        Average
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={
+                                            layoutTrack === 'personal'
+                                                ? 'is-active'
+                                                : undefined
+                                        }
+                                        onClick={() =>
+                                            setLayoutTrack('personal')
+                                        }
+                                    >
+                                        My layout
+                                    </button>
+                                </div>
                                 {generatedProvenance &&
                                     active.source === 'generated' && (
                                         <SourceBadge
@@ -437,13 +508,13 @@ export function FlowStudio({
                                     )}
                             </div>
                             <RendererProvider
-                                versionId={active.id}
+                                versionId={displayedVersion.id}
                                 capabilities={studio.capabilities}
                                 initialState={studio.defaultState}
                                 notify={notify}
                             >
                                 <Dashboard
-                                    schema={active.schema}
+                                    schema={displayedVersion.schema}
                                     changes={changes}
                                 />
                             </RendererProvider>

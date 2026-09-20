@@ -13,7 +13,10 @@ import {
 } from 'recharts';
 import type { ClientCapability } from '@flowjs/core/client/api';
 import { tracker } from '@flowjs/core/client/telemetry';
-import type { CollectionData, TimeseriesData } from '@flowjs/core/flow/data-contracts';
+import type {
+    CollectionData,
+    TimeseriesData,
+} from '@flowjs/core/flow/data-contracts';
 import type { UIComponent } from '@flowjs/core/flow/schema';
 import { useCapabilityData, useRenderer } from '../context';
 import { formatCell, formatChange, formatValue } from './format';

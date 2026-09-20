@@ -30,7 +30,7 @@ export function createPersonalDraft(
     average: VersionRecord,
     stored?: VersionRecord | null
 ): VersionRecord {
-    if (stored) return stored;
+    if (stored && stored.parentVersionId === average.id) return stored;
     return {
         ...average,
         id: `${average.id}-personal`,

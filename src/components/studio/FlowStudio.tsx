@@ -126,7 +126,6 @@ export function FlowStudio({
                 JSON.stringify(normalized.layouts.personal)
             );
         setStudio(normalized);
-        setLayoutTrack(layouts.selected);
         setRate(normalized.application.mutationRate);
         return normalized;
     }, []);

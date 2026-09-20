@@ -212,6 +212,17 @@ CREATE TABLE IF NOT EXISTS optimization_runs (
   applied_version_id TEXT,
   created_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS personal_versions (
+  id TEXT PRIMARY KEY,
+  application_id TEXT NOT NULL REFERENCES applications(id),
+  user_id TEXT NOT NULL,
+  parent_version_id TEXT NOT NULL,
+  config_json TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS personal_versions_user ON personal_versions (application_id, user_id, created_at);
 `;
 
 type Row = Record<string, unknown>;
@@ -371,6 +382,48 @@ export class FlowStore {
     }
 
     // ── versions ──────────────────────────────────────────────────────────────
+
+    createPersonalVersion(input: {
+        applicationId: string;
+        userId: string;
+        parentVersionId: string;
+        schema: UISchema;
+        reason: string;
+    }): VersionRecord {
+        const parent = this.getVersion(
+            input.applicationId,
+            input.parentVersionId
+        );
+        if (!parent)
+            throw new VersionError(
+                `Parent version "${input.parentVersionId}" does not exist.`
+            );
+        const id = `p${randomUUID().slice(0, 8)}`;
+        this.db
+            .prepare(
+                `INSERT INTO personal_versions (id, application_id, user_id, parent_version_id, config_json, reason, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`
+            )
+            .run(
+                id,
+                input.applicationId,
+                input.userId,
+                input.parentVersionId,
+                JSON.stringify(input.schema),
+                input.reason,
+                this.now()
+            );
+        return {
+            ...parent,
+            id,
+            parentVersionId: input.parentVersionId,
+            schema: input.schema,
+            mutations: [],
+            reason: input.reason,
+            evidence: { scope: 'personal', userId: input.userId },
+            createdAt: this.now(),
+        };
+    }
 
     /** Commit an immutable version and activate it in the same transaction. */
     createVersion(input: {

@@ -99,7 +99,7 @@ export const api = {
     refreshPersonal: (userId: string, refreshCount: number) =>
         request<{
             run: OptimizationRun | null;
-            schema: VersionRecord['schema'] | null;
+            version: VersionRecord | null;
             applied: boolean;
         }>('POST', '/personal-refresh', { userId, refreshCount }),
     apply: (runId: string, mode: 'auto' | 'manual') =>

@@ -206,9 +206,9 @@ export function FlowStudio({
             if (
                 personalResult.status === 'fulfilled' &&
                 personalResult.value.applied &&
-                personalResult.value.schema
+                personalResult.value.version
             ) {
-                const personalSchema = personalResult.value.schema;
+                const personalVersion = personalResult.value.version;
                 setLayoutTrack('personal');
                 setStudio((current) => {
                     if (!current) return null;
@@ -216,7 +216,7 @@ export function FlowStudio({
                     if (!layouts?.average || !layouts.personal) return current;
                     const nextPersonal = {
                         ...layouts.personal,
-                        schema: personalSchema,
+                        ...personalVersion,
                     };
                     localStorage.setItem(
                         `flowjs:personal-layout:${current.application.id}`,

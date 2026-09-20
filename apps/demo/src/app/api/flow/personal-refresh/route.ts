@@ -20,7 +20,11 @@ export async function POST(request: Request) {
         } catch {
             return {
                 run: null,
-                schema: demoPersonalSchema(runtime, userId, refreshCount),
+                version: savePersonal(
+                    runtime,
+                    userId,
+                    demoPersonalSchema(runtime, userId, refreshCount)
+                ),
                 applied: true,
             };
         }
@@ -32,7 +36,11 @@ export async function POST(request: Request) {
         )
             return {
                 run,
-                schema: demoPersonalSchema(runtime, userId, refreshCount),
+                version: savePersonal(
+                    runtime,
+                    userId,
+                    demoPersonalSchema(runtime, userId, refreshCount)
+                ),
                 applied: true,
             };
         const result = applyMutations(
@@ -40,8 +48,27 @@ export async function POST(request: Request) {
             run.proposedMutations,
             runtime.app
         );
-        if (!result.ok) return { run, schema: null, applied: false };
-        return { run, schema: result.schema, applied: true };
+        if (!result.ok) return { run, version: null, applied: false };
+        return {
+            run,
+            version: savePersonal(runtime, userId, result.schema),
+            applied: true,
+        };
+    });
+}
+
+function savePersonal(
+    runtime: ReturnType<typeof getRuntime>,
+    userId: string,
+    schema: ReturnType<typeof demoPersonalSchema>
+) {
+    const average = runtime.store.getActiveVersion(runtime.app.id)!;
+    return runtime.store.createPersonalVersion({
+        applicationId: runtime.app.id,
+        userId,
+        parentVersionId: average.id,
+        schema,
+        reason: 'Personal layout updated from individual usage',
     });
 }
 

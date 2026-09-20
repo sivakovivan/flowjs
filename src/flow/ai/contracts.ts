@@ -30,7 +30,9 @@ export const GeneratedComponentOutput = z.object({
 export const GeneratedSchemaOutput = z.object({
     reasoning: z
         .string()
-        .describe('Two or three sentences on the overall layout'),
+        .describe(
+            'One concise user-facing sentence explaining the overall layout, using no more than 25 words'
+        ),
     components: z.array(GeneratedComponentOutput),
 });
 export type GeneratedSchemaOutput = z.infer<typeof GeneratedSchemaOutput>;

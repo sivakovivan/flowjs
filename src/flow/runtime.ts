@@ -399,7 +399,7 @@ export function createRuntime(deps: {
                 previousPersonalVersionId:
                     previous.id === average.id ? null : previous.id,
                 refreshInstruction:
-                    'Create a complete new personal layout. Make the adaptation visually obvious: move several components and change useful sizes or primitive variants, even with sparse evidence.',
+                    'Create a complete new personal layout. Make the adaptation visually obvious: move several components and change useful sizes or primitive variants, even with sparse evidence. Keep the overall reasoning to one plain-language sentence of no more than 25 words.',
             };
             const { value, provenance } = await withFallback<{
                 schema: UISchema;

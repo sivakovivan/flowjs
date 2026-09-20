@@ -21,7 +21,7 @@ export const salesRecording: Recording = {
 
     generation: {
         reasoning:
-            'Headline revenue and order totals lead, followed by the revenue trend and recent transactions as the primary analytics. Secondary views, the date filter and account tools follow below.',
+            "Revenue and orders lead, with transactions and customer tools grouped around the user's frequent review-and-refund workflow.",
         components: [
             {
                 id: 'revenue-total',

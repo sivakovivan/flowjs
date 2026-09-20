@@ -153,11 +153,14 @@ export function createRuntime(deps: {
         return version;
     }
 
-    function analyze(version: VersionRecord = activeVersion()) {
+    function analyze(
+        version: VersionRecord = activeVersion(),
+        userId?: string
+    ) {
         const metrics = computeMetrics({
             versionId: version.id,
             schema: version.schema,
-            events: store.listEvents(app.id, version.id),
+            events: store.listEvents(app.id, version.id, userId),
             calls: store.listCalls(app.id),
         });
         const findings = findFriction({ app, schema: version.schema, metrics });
@@ -292,8 +295,13 @@ export function createRuntime(deps: {
         analyze,
 
         /** Ask OpenAI for a finding and proposal, validate and score it. Never changes the UI. */
-        async optimize(): Promise<OptimizationRun> {
-            const { version, metrics, findings } = analyze();
+        async optimize(
+            options: { userId?: string } = {}
+        ): Promise<OptimizationRun> {
+            const { version, metrics, findings } = analyze(
+                activeVersion(),
+                options.userId
+            );
             if (metrics.totalInteractions === 0) {
                 throw new RuntimeError(
                     'No interactions recorded for this version yet. Use the dashboard first.',

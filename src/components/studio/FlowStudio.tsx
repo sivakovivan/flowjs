@@ -27,8 +27,11 @@ import { HistoryMenu } from './HistoryMenu';
 import { SourceBadge } from './SourceBadge';
 import { TelemetryPanel } from './TelemetryPanel';
 import { CustomizationChat } from './CustomizationChat';
-import type { LayoutTrack } from '@flowjs/core/flow/layout-tracks';
-import { defaultLayoutTracks } from '@flowjs/core/flow/layout-tracks';
+import {
+    createPersonalDraft,
+    defaultLayoutTracks,
+    type LayoutTrack,
+} from '@flowjs/core/flow/layout-tracks';
 
 type Tab = 'evidence' | 'telemetry' | 'capabilities';
 
@@ -103,9 +106,26 @@ export function FlowStudio({
         const next = await api.state();
         // Keep clients compatible with an older API process during rolling deploys.
         const layouts = next.layouts ?? defaultLayoutTracks(next.active);
-        const normalized = { ...next, layouts };
+        const personalKey = `flowjs:personal-layout:${next.application.id}`;
+        const storedPersonal =
+            typeof window === 'undefined'
+                ? null
+                : JSON.parse(localStorage.getItem(personalKey) ?? 'null');
+        const normalized = {
+            ...next,
+            layouts: {
+                ...layouts,
+                personal: layouts.average
+                    ? createPersonalDraft(layouts.average, storedPersonal)
+                    : null,
+            },
+        };
+        if (normalized.layouts.personal)
+            localStorage.setItem(
+                personalKey,
+                JSON.stringify(normalized.layouts.personal)
+            );
         setStudio(normalized);
-        setLayoutTrack(layouts.selected);
         setRate(normalized.application.mutationRate);
         return normalized;
     }, []);
@@ -158,25 +178,60 @@ export function FlowStudio({
     // this is a new dashboard with no usage data yet; it should not block render.
     useEffect(() => {
         if (!studio?.active || typeof window === 'undefined') return;
-        const key = `flowjs:refresh-optimization:${studio.active.id}`;
+        const key = `flowjs:refresh-optimization:${studio.active.id}:${tracker.sessionId}`;
         if (sessionStorage.getItem(key)) return;
-        api.refreshOptimize()
-            .then(async (result) => {
-                // Only suppress subsequent refreshes after the server completed
-                // an optimization pass. A 409/no-data response must be retryable
-                // after the user creates more telemetry.
+        const refreshKey = `flowjs:personal-refresh-count:${studio.active.id}`;
+        const refreshCount = Number(localStorage.getItem(refreshKey) ?? 0) + 1;
+        localStorage.setItem(refreshKey, String(refreshCount));
+        Promise.allSettled([
+            api.refreshOptimize(),
+            api.refreshPersonal(tracker.userId, refreshCount),
+        ]).then(async ([averageResult, personalResult]) => {
+            // Only suppress subsequent refreshes after the server completed
+            // an optimization pass. A 409/no-data response must be retryable
+            // after the user creates more telemetry.
+            if (averageResult.status === 'fulfilled')
                 sessionStorage.setItem(key, 'completed');
-                if (result.applied && result.version) {
-                    await transitionTo(result.version);
-                    notify(
-                        'ok',
-                        `Applied ${result.version.id} from recent usage.`
+            if (
+                averageResult.status === 'fulfilled' &&
+                averageResult.value.applied &&
+                averageResult.value.version
+            ) {
+                await transitionTo(averageResult.value.version);
+                notify(
+                    'ok',
+                    `Applied ${averageResult.value.version.id} from aggregate usage.`
+                );
+            }
+            if (
+                personalResult.status === 'fulfilled' &&
+                personalResult.value.applied &&
+                personalResult.value.version
+            ) {
+                const personalVersion = personalResult.value.version;
+                setLayoutTrack('personal');
+                setStudio((current) => {
+                    if (!current) return null;
+                    const layouts = current?.layouts;
+                    if (!layouts?.average || !layouts.personal) return current;
+                    const nextPersonal = {
+                        ...layouts.personal,
+                        ...personalVersion,
+                    };
+                    localStorage.setItem(
+                        `flowjs:personal-layout:${current.application.id}`,
+                        JSON.stringify(nextPersonal)
                     );
-                }
-            })
-            .catch(() => {
-                // Optimization is opportunistic on refresh; normal rendering wins.
-            });
+                    return {
+                        ...current,
+                        layouts: { ...layouts, personal: nextPersonal },
+                    };
+                });
+                // Reconcile after both refresh passes so an aggregate
+                // refresh cannot overwrite the newly persisted personal version.
+                await refreshState();
+            }
+        });
     }, [notify, studio?.active, transitionTo]);
 
     async function generate() {
@@ -508,7 +563,12 @@ export function FlowStudio({
                                     )}
                             </div>
                             <RendererProvider
-                                versionId={displayedVersion.id}
+                                // Personal drafts are browser-local; telemetry is
+                                // attributed to their persisted average parent so
+                                // the server can validate and analyze the events.
+                                versionId={
+                                    studio.active?.id ?? displayedVersion.id
+                                }
                                 capabilities={studio.capabilities}
                                 initialState={studio.defaultState}
                                 notify={notify}

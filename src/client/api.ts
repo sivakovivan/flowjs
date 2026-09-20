@@ -92,10 +92,16 @@ export const api = {
     optimize: () => request<OptimizationRun>('POST', '/optimize'),
     refreshOptimize: () =>
         request<{
-            run: OptimizationRun;
+            run: OptimizationRun | null;
             version: VersionRecord | null;
             applied: boolean;
         }>('POST', '/refresh'),
+    refreshPersonal: (userId: string, refreshCount: number) =>
+        request<{
+            run: OptimizationRun | null;
+            version: VersionRecord | null;
+            applied: boolean;
+        }>('POST', '/personal-refresh', { userId, refreshCount }),
     apply: (runId: string, mode: 'auto' | 'manual') =>
         request<{ version: VersionRecord; run: OptimizationRun }>(
             'POST',

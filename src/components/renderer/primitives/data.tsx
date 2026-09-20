@@ -6,8 +6,6 @@ import {
     CartesianGrid,
     Line,
     LineChart,
-    ResponsiveContainer,
-    Tooltip,
     XAxis,
     YAxis,
 } from 'recharts';
@@ -20,6 +18,22 @@ import type {
 import type { UIComponent } from '@flowjs/core/flow/schema';
 import { useCapabilityData, useRenderer } from '../context';
 import { formatCell, formatChange, formatValue } from './format';
+import { Badge } from '../../ui/badge';
+import { Button } from '../../ui/button';
+import { Skeleton } from '../../ui/skeleton';
+import {
+    ChartContainer,
+    ChartTooltip,
+    ChartTooltipContent,
+} from '../../ui/chart';
+import {
+    Table as DataTable,
+    TableHeader,
+    TableBody,
+    TableRow,
+    TableHead,
+    TableCell,
+} from '../../ui/table';
 
 type DataCapability = Extract<ClientCapability, { kind: 'data' }>;
 
@@ -45,8 +59,8 @@ function Status({
         );
     if (loading)
         return (
-            <div
-                className="app-skeleton"
+            <Skeleton
+                className="h-12 w-full"
                 aria-busy="true"
                 aria-label="Loading"
             />
@@ -100,14 +114,13 @@ function ChartShell({
     children: React.ReactNode;
 }) {
     return (
-        <div
-            className={`app-chart app-chart--${component.size}`}
+        <ChartContainer
+            config={{ value: { label: 'Value', color: 'var(--app-primary)' } }}
+            className={`app-chart app-chart--${component.size} aspect-auto w-full`}
             onClick={() => tracker.track(component.id, 'component_click')}
         >
-            <ResponsiveContainer width="100%" height="100%">
-                {children as React.ReactElement}
-            </ResponsiveContainer>
-        </div>
+            {children as React.ReactElement}
+        </ChartContainer>
     );
 }
 
@@ -146,14 +159,13 @@ export function TimeseriesChart({
             width={56}
             tickFormatter={(value: number) => formatValue(value, unit, true)}
         />,
-        <Tooltip
+        <ChartTooltip
             key="tooltip"
-            formatter={(value) => formatValue(Number(value), unit)}
-            contentStyle={{
-                borderRadius: 'var(--app-radius)',
-                border: '1px solid var(--app-border)',
-                fontSize: 13,
-            }}
+            content={
+                <ChartTooltipContent
+                    formatter={(value) => formatValue(Number(value), unit)}
+                />
+            }
         />,
     ];
     return (
@@ -221,33 +233,31 @@ export function Table({ component, capability }: DataProps) {
 
     return (
         <div className={`app-table-wrap ${loading ? 'is-refreshing' : ''}`}>
-            <table className="app-table">
-                <thead>
-                    <tr>
+            <DataTable className="app-table">
+                <TableHeader>
+                    <TableRow>
                         {columns.map((column) => (
-                            <th
+                            <TableHead
                                 key={column.key}
                                 className={
                                     column.format === 'currency'
-                                        ? 'is-numeric'
+                                        ? 'text-right'
                                         : undefined
                                 }
                             >
                                 {column.label}
-                            </th>
+                            </TableHead>
                         ))}
-                    </tr>
-                </thead>
-                <tbody>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
                     {data.rows.map((row) => {
                         const key = String(row[rowKey]);
                         const isSelected = selectable && selected === key;
                         return (
-                            <tr
+                            <TableRow
                                 key={key}
-                                className={
-                                    isSelected ? 'is-selected' : undefined
-                                }
+                                className={isSelected ? 'bg-accent' : undefined}
                                 aria-selected={
                                     selectable ? isSelected : undefined
                                 }
@@ -279,33 +289,34 @@ export function Table({ component, capability }: DataProps) {
                                 }}
                             >
                                 {columns.map((column) => (
-                                    <td
+                                    <TableCell
                                         key={column.key}
                                         className={
                                             column.format === 'currency'
-                                                ? 'is-numeric'
+                                                ? 'text-right'
                                                 : undefined
                                         }
                                     >
                                         {column.format === 'status' ? (
-                                            <span
+                                            <Badge
+                                                variant="secondary"
                                                 className={`app-pill app-pill--${String(row[column.key])}`}
                                             >
                                                 {String(row[column.key])}
-                                            </span>
+                                            </Badge>
                                         ) : (
                                             formatCell(
                                                 row[column.key],
                                                 column.format
                                             )
                                         )}
-                                    </td>
+                                    </TableCell>
                                 ))}
-                            </tr>
+                            </TableRow>
                         );
                     })}
-                </tbody>
-            </table>
+                </TableBody>
+            </DataTable>
             <p className="app-table__foot">
                 Showing {data.rows.length} of {data.total}.
                 {selectable &&
@@ -339,9 +350,11 @@ export function List({ component, capability }: DataProps) {
                     selectable && selection[capability.id] === key;
                 return (
                     <li key={key}>
-                        <button
+                        <Button
                             type="button"
-                            className={isSelected ? 'is-selected' : undefined}
+                            variant="ghost"
+                            className={`h-auto w-full justify-between rounded-md px-3 py-2 text-left whitespace-normal ${isSelected ? 'bg-accent' : ''}`}
+                            aria-pressed={selectable ? isSelected : undefined}
                             onClick={() => {
                                 tracker.track(component.id, 'component_click', {
                                     row: key,
@@ -367,7 +380,7 @@ export function List({ component, capability }: DataProps) {
                                     )}
                                 </span>
                             )}
-                        </button>
+                        </Button>
                     </li>
                 );
             })}

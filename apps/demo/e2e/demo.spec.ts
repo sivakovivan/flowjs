@@ -18,7 +18,7 @@ async function setMutationRate(page: Page, rate: number) {
     await saved;
 }
 
-test('capabilities in, adaptive interface out', async ({ page }) => {
+test('capabilities in, adaptive interface out', async ({ page }, testInfo) => {
     await page.goto('/developer');
     await expect(
         page.getByRole('heading', { name: 'No dashboard layout was written.' })
@@ -29,11 +29,40 @@ test('capabilities in, adaptive interface out', async ({ page }) => {
         page.locator('.stage').getByText('Recorded response')
     ).toBeVisible();
 
+    await expect(
+        page.locator('[data-component="revenue-chart"]')
+    ).toHaveAttribute('data-slot', 'card');
+    await expect(
+        page
+            .locator('[data-component="revenue-chart"] [data-slot="chart"] svg')
+            .first()
+    ).toBeVisible();
+    await expect(
+        page.locator(
+            '[data-component="transactions-table"] [data-slot="table"]'
+        )
+    ).toBeVisible();
+    await page.screenshot({
+        path: testInfo.outputPath('shadcn-dashboard.png'),
+        fullPage: true,
+    });
+
     // Use it: date range → revenue chart, repeatedly, then export.
     const dateRange = page.getByRole('combobox', { name: 'Date range' });
     for (const range of ['7d', '90d', '30d']) {
         await dateRange.scrollIntoViewIfNeeded();
-        await dateRange.selectOption(range);
+        await dateRange.click();
+        await expect(
+            page.locator('.stage [data-slot="select-content"]')
+        ).toBeVisible();
+        await page
+            .getByRole('option', {
+                name: { '7d': '7 days', '90d': '90 days', '30d': '30 days' }[
+                    range
+                ],
+                exact: true,
+            })
+            .click();
         await page
             .locator('[data-component="revenue-chart"] .app-chart')
             .click();
@@ -150,8 +179,11 @@ test('retries on a slow backend are diagnosed as performance, not redesigned', a
     const exportPdf = page.getByRole('button', { name: 'Export PDF' });
     // Impatient user: clicks again while the slow PDF export is still running.
     await exportPdf.click();
-    await exportPdf.click();
-    await exportPdf.click();
+    await expect(exportPdf).toHaveAttribute('aria-busy', 'true');
+    // Force physical clicks because Playwright otherwise waits for aria-disabled
+    // to clear and starts a second export instead of simulating an impatient user.
+    await exportPdf.click({ force: true });
+    await exportPdf.click({ force: true });
     await expect(
         page.getByText(/PDF report for \d+ transactions is ready/)
     ).toBeVisible({ timeout: 10_000 });

@@ -29,14 +29,19 @@
         "test:e2e": "pnpm --dir apps/demo test:e2e"
     },
     "dependencies": {
-        "@sentry/nextjs": "^10.75.0",
         "@samasante/liquid-glass": "0.1.1",
+        "@sentry/nextjs": "^10.75.0",
+        "class-variance-authority": "^0.7.1",
+        "clsx": "^2.1.1",
+        "lucide-react": "^1.47.0",
         "motion": "^13.4.0",
         "next": "^16.3.5",
         "openai": "^7.19.0",
+        "radix-ui": "^1.6.7",
         "react": "^19.3.0",
         "react-dom": "^19.3.0",
         "recharts": "^3.10.1",
+        "tailwind-merge": "^3.7.0",
         "zod": "^4.6.5"
     },
     "devDependencies": {

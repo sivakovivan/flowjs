@@ -4,6 +4,12 @@ import { getRuntime, handle } from '@/server/flow';
 export async function POST() {
     return handle(async () => {
         const runtime = getRuntime();
+        if (runtime.state().baselineMode === 'daily')
+            return {
+                run: null,
+                version: runtime.state().active,
+                applied: false,
+            };
         const run = await runtime.optimize();
         if (run.status !== 'auto')
             return { run, version: null, applied: false };

@@ -75,9 +75,17 @@ function ComponentFrame(props: {
             onPointerEnter={() =>
                 tracker.track(component.id, 'component_hover')
             }
+            onPointerLeave={(event) => {
+                if (!event.currentTarget.contains(document.activeElement))
+                    tracker.endEngagement(component.id);
+            }}
             onFocusCapture={() =>
                 tracker.track(component.id, 'component_focus')
             }
+            onBlurCapture={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget))
+                    tracker.endEngagement(component.id);
+            }}
             onPointerDown={(event) => {
                 const target = event.target as HTMLElement;
                 if (target.closest(':disabled, [aria-disabled="true"]'))

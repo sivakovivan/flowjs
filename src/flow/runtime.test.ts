@@ -15,6 +15,12 @@ import {
 } from './runtime';
 import { diffSchemas } from './schema';
 import { FlowStore } from './store';
+import {
+    analyticsSchemaHash,
+    latestBaselineWindow,
+    type AggregateEvidence,
+} from './analytics';
+import { computeMetrics } from './metrics';
 
 const app = fixtureApp();
 
@@ -79,7 +85,7 @@ let clock: number;
 
 function runtime(
     live: FlowAIProvider | null,
-    options: { forceRecorded?: boolean } = {}
+    options: { forceRecorded?: boolean; dailyBaseline?: boolean } = {}
 ) {
     return createRuntime({
         app,
@@ -194,6 +200,68 @@ describe('generate', () => {
 });
 
 describe('personal regeneration', () => {
+    it('only offers cached personal layouts descended from the current daily baseline', async () => {
+        const rt = runtime(stub({}), { dailyBaseline: true });
+        await rt.generate();
+        await rt.regeneratePersonal('person-1');
+        const personal = (await rt.regeneratePersonal('person-1')).version;
+        expect(rt.state('person-1').layouts.personal?.id).toBe(personal.id);
+        expect(rt.state('person-2').layouts.personal).toBeNull();
+
+        await rt.customize('Next shared baseline');
+        expect(rt.state('person-1').layouts).toMatchObject({
+            average: { id: 'v2' },
+            personal: null,
+        });
+        expect(
+            store.getPersonalVersion(app.id, 'person-1', personal.id)
+        ).not.toBeNull();
+
+        const rebased = (await rt.regeneratePersonal('person-1')).version;
+        expect(rt.state('person-1').layouts.personal?.id).toBe(rebased.id);
+        rt.undo();
+        expect(rt.state('person-1').layouts).toMatchObject({
+            average: { id: 'v1' },
+            personal: null,
+        });
+    });
+
+    it('does not persist a personal schema if the daily baseline changes during generation', async () => {
+        const rt = runtime(
+            stub({
+                generatePersonalSchema: async () => {
+                    await rt.customize('Concurrent baseline');
+                    return structuredClone(generation);
+                },
+            }),
+            { dailyBaseline: true }
+        );
+        await rt.generate();
+        await expect(rt.regeneratePersonal('person-1')).rejects.toThrow(
+            /baseline changed during personal/
+        );
+        expect(store.getLatestPersonalVersion(app.id, 'person-1')).toBeNull();
+        expect(store.getActiveVersion(app.id)?.id).toBe('v2');
+    });
+
+    it('starts from the next daily baseline when the personal ancestry belongs to an older baseline', async () => {
+        const rt = runtime(stub({}), { dailyBaseline: true });
+        await rt.generate();
+        await rt.regeneratePersonal('person-1');
+        const older = (await rt.regeneratePersonal('person-1')).version;
+        expect(store.getPersonalBaselineId(app.id, 'person-1', older.id)).toBe(
+            'v1'
+        );
+        await rt.customize('A new shared baseline');
+        const refreshed = (await rt.regeneratePersonal('person-1')).version;
+        expect(refreshed.parentVersionId).toBe('v2');
+        expect(
+            store.getPersonalBaselineId(app.id, 'person-1', refreshed.id)
+        ).toBe('v2');
+        const next = (await rt.regeneratePersonal('person-1')).version;
+        expect(next.parentVersionId).toBe(refreshed.id);
+    });
+
     it('always creates a changed full-schema version and chains personal history', async () => {
         const rt = runtime(stub({}));
         const average = (await rt.generate()).version;
@@ -220,6 +288,232 @@ describe('personal regeneration', () => {
         expect(store.getLatestPersonalVersion(app.id, 'person-1')?.id).toBe(
             second.version.id
         );
+    });
+});
+
+function dailyEvidence(): AggregateEvidence {
+    const schema = fixtureSchema();
+    const metrics = computeMetrics({
+        versionId: 'v1',
+        schema,
+        events: dateRangeFriction().map((event) => ({
+            ...event,
+            seeded: false,
+        })),
+        calls: [],
+    });
+    return {
+        source: 'tiger',
+        sourceId: store.telemetrySourceId,
+        applicationId: app.id,
+        versionId: 'v1',
+        schemaHash: analyticsSchemaHash(schema),
+        generatedAt: clock,
+        window: latestBaselineWindow(clock),
+        uniqueUsers: metrics.sessions.live,
+        population: { users: 6, sessions: 6, interactions: 60 },
+        capabilityUsage: [
+            {
+                capabilityId: 'dateRange',
+                users: 6,
+                sessions: 6,
+                interactions: 60,
+                activeMs: 0,
+            },
+        ],
+        metrics: {
+            ...metrics,
+            versionId: 'v1',
+            sessions: { ...metrics.sessions, seeded: 0 },
+        },
+        engagement: [],
+        navigation: [],
+        insights: [],
+    };
+}
+
+describe('daily shared baseline', () => {
+    beforeEach(() => {
+        clock = Date.UTC(2026, 8, 20, 1);
+    });
+
+    it('accepts semantic navigation only for an existing version and an allowlisted path', async () => {
+        const rt = runtime(stub({}));
+        await rt.generate();
+        const base = {
+            versionId: 'v1',
+            sessionId: 'session',
+            userId: 'browser',
+            componentId: '__navigation__',
+            eventType: 'menu_open',
+            sinceLoadMs: 0,
+            timestamp: clock,
+            metadata: { path: ['controls', 'history'] },
+        };
+        expect(
+            rt.recordTelemetry([
+                base,
+                { ...base, versionId: 'v999' },
+                { ...base, metadata: { path: ['private query text'] } },
+                { ...base, eventType: 'component_click' },
+            ])
+        ).toEqual({ accepted: 1, rejected: 3 });
+        expect(store.listEvents(app.id, 'v1')[0].capabilityId).toBe(
+            '__navigation__'
+        );
+    });
+
+    it('publishes once from Tiger evidence without local events or another layout track', async () => {
+        let proposals = 0;
+        const rt = runtime(
+            stub({
+                proposeOptimization: async (brief) => {
+                    proposals++;
+                    expect(brief.aggregateEvidence?.population.users).toBe(6);
+                    return structuredClone(promoteDateRange);
+                },
+            }),
+            { dailyBaseline: true }
+        );
+        await rt.generate();
+        rt.setMutationRate(1);
+        const evidence = dailyEvidence();
+        const first = await rt.publishDailyBaseline(evidence);
+        expect(first).toMatchObject({
+            status: 'applied',
+            result: { versionId: 'v2' },
+        });
+        expect(await rt.publishDailyBaseline(evidence)).toEqual(first);
+        expect(proposals).toBe(1);
+        expect(store.getActiveVersion(app.id)?.id).toBe('v2');
+        expect(store.getActiveVersion(app.id)?.evidence).toMatchObject({
+            aggregate: { source: 'tiger' },
+        });
+        expect(store.listEvents(app.id, 'v1')).toEqual([]);
+        await expect(rt.optimize()).rejects.toThrow(/daily analytics job/);
+    });
+
+    it('keeps the baseline without spending an AI call when population evidence is too small', async () => {
+        const rt = runtime(
+            stub({
+                proposeOptimization: async () => {
+                    throw new Error('must not call');
+                },
+            })
+        );
+        await rt.generate();
+        const evidence = dailyEvidence();
+        evidence.population.users = 1;
+        expect(await rt.publishDailyBaseline(evidence)).toMatchObject({
+            status: 'insufficient-data',
+        });
+        expect(store.listVersions(app.id)).toHaveLength(1);
+    });
+
+    it('allows no-change and respects the existing mutation-rate threshold', async () => {
+        const rt = runtime(
+            stub({
+                proposeOptimization: async () => ({
+                    ...promoteDateRange,
+                    mutations: [],
+                }),
+            })
+        );
+        await rt.generate();
+        expect(await rt.publishDailyBaseline(dailyEvidence())).toMatchObject({
+            status: 'unchanged',
+        });
+        clock += 86_400_000;
+        rt.setMutationRate(0);
+        const conservative = runtime(stub({}), { dailyBaseline: true });
+        expect(
+            await conservative.publishDailyBaseline(dailyEvidence())
+        ).toMatchObject({ status: 'pending' });
+        expect(conservative.state().baselineRun).toMatchObject({
+            status: 'pending',
+            sourceVersionId: 'v1',
+        });
+        expect(store.listVersions(app.id)).toHaveLength(1);
+        const pending = conservative.state().baselineRun!;
+        conservative.apply(pending.id, 'manual');
+        expect(conservative.state().baselineRun).toMatchObject({
+            status: 'applied',
+            appliedVersionId: 'v2',
+        });
+    });
+
+    it('never auto-publishes recorded fallback output after a live provider failure', async () => {
+        const rt = runtime(
+            stub({
+                proposeOptimization: async () => {
+                    throw new Error('upstream down');
+                },
+            })
+        );
+        await rt.generate();
+        rt.setMutationRate(1);
+        expect(await rt.publishDailyBaseline(dailyEvidence())).toMatchObject({
+            status: 'rejected',
+        });
+        expect(store.listVersions(app.id)).toHaveLength(1);
+    });
+
+    it('rejects a mismatched installation, schema or unfinished window', async () => {
+        const rt = runtime(stub({}));
+        await rt.generate();
+        const evidence = dailyEvidence();
+        await expect(
+            rt.publishDailyBaseline({
+                ...evidence,
+                sampleKind: 'simulated',
+                metrics: {
+                    ...evidence.metrics,
+                    sessions: {
+                        ...evidence.metrics.sessions,
+                        live: 0,
+                        seeded: evidence.metrics.sessions.total,
+                    },
+                },
+            })
+        ).rejects.toThrow(/installation|Simulated/);
+        await expect(
+            rt.publishDailyBaseline({
+                ...evidence,
+                sourceId: '00000000-0000-4000-8000-000000000001',
+            })
+        ).rejects.toThrow(/installation/);
+        await expect(
+            rt.publishDailyBaseline({ ...evidence, schemaHash: '0'.repeat(64) })
+        ).rejects.toThrow(/baseline changed/);
+        await expect(
+            rt.publishDailyBaseline({
+                ...evidence,
+                window: {
+                    from: evidence.window.to,
+                    to: evidence.window.to + 86_400_000,
+                },
+            })
+        ).rejects.toThrow(/completed baseline day/);
+    });
+
+    it('rejects publication when another change activates during the AI call', async () => {
+        const rt = runtime(
+            stub({
+                proposeOptimization: async () => {
+                    await rt.customize('A user change');
+                    return structuredClone(promoteDateRange);
+                },
+            })
+        );
+        await rt.generate();
+        rt.setMutationRate(1);
+        await expect(rt.publishDailyBaseline(dailyEvidence())).rejects.toThrow(
+            /dashboard changed/
+        );
+        expect(store.listVersions(app.id)).toHaveLength(2);
+        expect(
+            store.getBaselineJob(app.id, latestBaselineWindow(clock).to)?.status
+        ).toBe('failed');
     });
 });
 

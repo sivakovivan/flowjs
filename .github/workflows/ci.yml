@@ -15,6 +15,20 @@ jobs:
             contents: read
         env:
             FLOW_AI_MODE: recorded
+            FLOW_ANALYTICS_ENABLED: '0'
+        services:
+            timescale:
+                image: timescale/timescaledb-ha:pg17
+                env:
+                    POSTGRES_PASSWORD: flowjs-ci
+                    POSTGRES_DB: flowjs_test
+                ports:
+                    - 5432:5432
+                options: >-
+                    --health-cmd "pg_isready -U postgres -d flowjs_test"
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 10
         steps:
             - name: Check out repository
               uses: actions/checkout@v4
@@ -37,10 +51,20 @@ jobs:
               run: pnpm format:check
 
             - name: Typecheck
-              run: pnpm typecheck
+              run: |
+                  pnpm typecheck
+                  pnpm --dir apps/demo typecheck
+                  pnpm --dir apps/analytics typecheck
 
             - name: Run unit tests
-              run: pnpm test
+              run: |
+                  pnpm test
+                  pnpm --dir apps/demo test
+
+            - name: Test analytics against TimescaleDB
+              env:
+                  FLOW_ANALYTICS_TEST_DATABASE_URL: postgresql://postgres:flowjs-ci@127.0.0.1:5432/flowjs_test?sslmode=disable
+              run: pnpm --dir apps/analytics test
 
             - name: Build
               run: pnpm build

@@ -10,12 +10,14 @@ import {
 } from 'react';
 import {
     api,
+    type AIProvenance,
     type MetricsResponse,
     type OptimizationRun,
     type StudioState,
     type VersionRecord,
 } from '@flowjs/core/client/api';
 import { tracker } from '@flowjs/core/client/telemetry';
+import type { AggregateEvidence } from '@flowjs/core/flow/analytics';
 import { diffSchemas, type ComponentChange } from '@flowjs/core/flow/schema';
 import { acceptanceThreshold } from '@flowjs/core/flow/scoring';
 import { Dashboard } from '../renderer/Dashboard';
@@ -107,8 +109,12 @@ export function FlowStudio({
     const [historyOpen, setHistoryOpen] = useState(false);
     const [rate, setRate] = useState(0.5);
     const [busy, setBusy] = useState(false);
-    const [layoutTrack, setLayoutTrack] = useState<LayoutTrack>('personal');
+    const [layoutTrack, setLayoutTrack] = useState<LayoutTrack>('average');
     const [personalizing, setPersonalizing] = useState(false);
+    const [personalSource, setPersonalSource] = useState<{
+        versionId: string;
+        provenance: AIProvenance;
+    } | null>(null);
     const [notices, setNotices] = useState<Notice[]>([]);
     const noticeId = useRef(0);
 
@@ -130,6 +136,8 @@ export function FlowStudio({
             layouts,
         };
         setStudio(normalized);
+        if (normalized.baselineMode === 'daily')
+            setRun(normalized.baselineRun ?? null);
         if (developerMode) setLayoutTrack('average');
         setRate(normalized.application.mutationRate);
         return normalized;
@@ -186,12 +194,14 @@ export function FlowStudio({
         setLayoutChangeRationale(null);
         setLayoutChangeNotice('Analyzing how you use this dashboard…');
         try {
-            const [{ version }] = await Promise.all([
+            await tracker.flush();
+            const [{ version, provenance }] = await Promise.all([
                 api.refreshPersonal(tracker.userId),
                 new Promise((resolve) =>
                     setTimeout(resolve, REGENERATION_REVEAL_MS)
                 ),
             ]);
+            setPersonalSource({ versionId: version.id, provenance });
             const previous = displayedVersion;
             const personalChanges = previous
                 ? diffSchemas(previous.schema, version.schema)
@@ -273,7 +283,7 @@ export function FlowStudio({
     );
 
     async function optimize() {
-        tracker.flush();
+        await tracker.flush();
         setOptimizing(true);
         setTab('evidence');
         setRun(null);
@@ -389,18 +399,16 @@ export function FlowStudio({
     }
 
     const active = studio.active;
+    const aggregateEvidence = (
+        studio.layouts?.average?.evidence as {
+            aggregate?: AggregateEvidence;
+        } | null
+    )?.aggregate;
     const threshold = acceptanceThreshold(rate);
     const generatedProvenance =
-        active &&
-        (
-            active.evidence as {
-                ai?: {
-                    source: 'live' | 'recorded';
-                    model: string;
-                    fallbackReason: string | null;
-                };
-            } | null
-        )?.ai;
+        personalSource && displayedVersion?.id === personalSource.versionId
+            ? personalSource.provenance
+            : (displayedVersion?.evidence as { ai?: AIProvenance } | null)?.ai;
 
     return (
         <MotionConfig reducedMotion="user">
@@ -483,7 +491,16 @@ export function FlowStudio({
                                 type="button"
                                 className="chrome-button chrome-button--signal"
                                 onClick={optimize}
-                                disabled={optimizing || applying}
+                                disabled={
+                                    optimizing ||
+                                    applying ||
+                                    studio.baselineMode === 'daily'
+                                }
+                                title={
+                                    studio.baselineMode === 'daily'
+                                        ? 'Shared baseline is updated by the daily job'
+                                        : undefined
+                                }
                             >
                                 {optimizing ? 'Optimizing…' : 'Optimize now'}
                             </button>
@@ -538,8 +555,8 @@ export function FlowStudio({
                             <div className="stage__meta">
                                 <p>
                                     {layoutTrack === 'average'
-                                        ? 'Average layout'
-                                        : 'Personal layout'}{' '}
+                                        ? 'Aggregate layout'
+                                        : 'Your layout'}{' '}
                                     · {displayedVersion.id}
                                     {developerMode
                                         ? `: ${displayedVersion.reason}`
@@ -552,41 +569,66 @@ export function FlowStudio({
                                 >
                                     <button
                                         type="button"
+                                        aria-pressed={layoutTrack === 'average'}
                                         className={
                                             layoutTrack === 'average'
                                                 ? 'is-active'
                                                 : undefined
                                         }
-                                        onClick={() =>
-                                            setLayoutTrack('average')
-                                        }
+                                        onClick={() => {
+                                            tracker.navigation('tab_select', [
+                                                'layout',
+                                                'average',
+                                            ]);
+                                            setLayoutTrack('average');
+                                        }}
                                     >
-                                        Average
+                                        Aggregate
                                     </button>
                                     <button
                                         type="button"
+                                        aria-pressed={
+                                            layoutTrack === 'personal'
+                                        }
+                                        disabled={personalizing}
                                         className={
                                             layoutTrack === 'personal'
                                                 ? 'is-active'
                                                 : undefined
                                         }
-                                        onClick={() =>
-                                            setLayoutTrack('personal')
-                                        }
+                                        onClick={() => {
+                                            tracker.navigation('tab_select', [
+                                                'layout',
+                                                'personal',
+                                            ]);
+                                            if (studio.layouts?.personal)
+                                                setLayoutTrack('personal');
+                                            else void regeneratePersonal();
+                                        }}
                                     >
-                                        My layout
+                                        Yours
                                     </button>
                                 </div>
-                                {generatedProvenance &&
-                                    active.source === 'generated' && (
-                                        <SourceBadge
-                                            source={generatedProvenance.source}
-                                            model={generatedProvenance.model}
-                                            fallbackReason={
-                                                generatedProvenance.fallbackReason
-                                            }
-                                        />
-                                    )}
+                                {generatedProvenance && (
+                                    <SourceBadge
+                                        source={generatedProvenance.source}
+                                        model={generatedProvenance.model}
+                                        fallbackReason={
+                                            generatedProvenance.fallbackReason
+                                        }
+                                    />
+                                )}
+                                {studio.analyticsSampleKind === 'simulated' && (
+                                    <span
+                                        className="source source--recorded"
+                                        data-testid="cohort-source"
+                                    >
+                                        Simulated cohort
+                                        {aggregateEvidence
+                                            ? ` · ${aggregateEvidence.population.users} browsers · ${aggregateEvidence.population.sessions} sessions`
+                                            : ''}
+                                    </span>
+                                )}
                             </div>
                             <RendererProvider
                                 versionId={displayedVersion.id}
@@ -624,7 +666,13 @@ export function FlowStudio({
                                                     ? 'is-active'
                                                     : undefined
                                             }
-                                            onClick={() => setTab(name)}
+                                            onClick={() => {
+                                                tracker.navigation(
+                                                    'tab_select',
+                                                    ['developer', name]
+                                                );
+                                                setTab(name);
+                                            }}
                                         >
                                             {name === 'telemetry'
                                                 ? 'Telemetry'
@@ -638,6 +686,7 @@ export function FlowStudio({
                                     {tab === 'telemetry' && (
                                         <TelemetryPanel
                                             data={metrics}
+                                            aggregate={aggregateEvidence}
                                             onSeed={seed}
                                             onClearSeeded={clearSeeded}
                                             busy={busy}

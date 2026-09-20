@@ -176,6 +176,74 @@ export function seedSessions(input: {
     return { events, calls };
 }
 
+export function seedAggregateCohort(input: {
+    app: FlowApp;
+    schema: UISchema;
+    versionId: string;
+    window: { from: number; to: number };
+}): { events: TelemetryEvent[]; calls: CapabilityCall[] } {
+    if (input.window.to - input.window.from !== 86_400_000)
+        throw new Error('The simulated cohort needs a complete daily window.');
+    const seeded = seedSessions({
+        ...input,
+        count: 24,
+        now: input.window.from + 12 * 60 * 60_000,
+        seed: 20260920,
+    });
+    const sessions = [
+        ...new Set(seeded.events.map((event) => event.sessionId)),
+    ];
+    const browsers = new Map(
+        sessions.map((sessionId, index) => [
+            sessionId,
+            `simulated-browser-${String((index % 12) + 1).padStart(2, '0')}`,
+        ])
+    );
+    const events: TelemetryEvent[] = seeded.events.map((event) => ({
+        ...event,
+        userId: browsers.get(event.sessionId)!,
+    }));
+    for (const event of [...events]) {
+        if (
+            event.eventType === 'component_click' ||
+            event.eventType === 'value_change'
+        )
+            events.push({
+                ...event,
+                eventType: 'active_time',
+                createdAt: event.createdAt + 500,
+                sinceLoadMs: event.sinceLoadMs + 500,
+                metadata: { seeded: true, activeMs: 1200, viewport: 'wide' },
+            });
+    }
+    for (const [index, sessionId] of sessions.entries()) {
+        if (index % 3 !== 0) continue;
+        const first = events.find((event) => event.sessionId === sessionId)!;
+        const start = first.createdAt - first.sinceLoadMs;
+        const path = ['controls', 'history'];
+        for (const [eventType, offset, activeMs] of [
+            ['menu_open', 45_000, 0],
+            ['active_time', 47_500, 2500],
+            [index % 6 === 0 ? 'menu_close' : 'menu_select', 48_000, 0],
+        ] as const)
+            events.push({
+                ...first,
+                componentId: '__navigation__',
+                capabilityId: '__navigation__',
+                eventType,
+                createdAt: start + offset,
+                sinceLoadMs: offset,
+                metadata: { seeded: true, path, activeMs, viewport: 'wide' },
+            });
+    }
+    return {
+        events: events.sort(
+            (first, second) => first.createdAt - second.createdAt
+        ),
+        calls: seeded.calls,
+    };
+}
+
 function seededCall(
     applicationId: string,
     versionId: string,

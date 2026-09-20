@@ -1,4 +1,5 @@
 import type { Finding } from '../friction';
+import type { AggregateEvidence } from '../analytics';
 import type { Metrics } from '../metrics';
 import { compatiblePrimitives, SIZE_SPAN } from '../primitives';
 import type { FlowApp } from '../registry';
@@ -32,6 +33,19 @@ export interface OptimizationBrief extends GenerationBrief {
     topSequences: Metrics['transitions'];
     backendLatency: Array<Record<string, unknown>>;
     heuristicFindings: Finding[];
+    aggregateEvidence?: Pick<
+        AggregateEvidence,
+        | 'source'
+        | 'sampleKind'
+        | 'window'
+        | 'population'
+        | 'capabilityUsage'
+        | 'engagement'
+        | 'navigation'
+        | 'insights'
+    > & {
+        baselineSessions: number;
+    };
 }
 
 export interface PersonalizationBrief extends OptimizationBrief {
@@ -57,6 +71,7 @@ export function optimizationBrief(input: {
     schema: UISchema;
     metrics: Metrics;
     findings: Finding[];
+    aggregate?: AggregateEvidence;
 }): OptimizationBrief {
     const rows = layoutRows(input.schema);
     return {
@@ -66,10 +81,21 @@ export function optimizationBrief(input: {
             row: rows.get(c.id) ?? null,
         })),
         sampleSize: {
-            sessions: input.metrics.sessions.total,
-            liveSessions: input.metrics.sessions.live,
-            seededSessions: input.metrics.sessions.seeded,
-            interactions: input.metrics.totalInteractions,
+            sessions:
+                input.aggregate?.population.sessions ??
+                input.metrics.sessions.total,
+            liveSessions: input.aggregate
+                ? input.aggregate.sampleKind === 'simulated'
+                    ? 0
+                    : input.aggregate.population.sessions
+                : input.metrics.sessions.live,
+            seededSessions:
+                input.aggregate?.sampleKind === 'simulated'
+                    ? input.aggregate.population.sessions
+                    : input.metrics.sessions.seeded,
+            interactions:
+                input.aggregate?.population.interactions ??
+                input.metrics.totalInteractions,
         },
         componentMetrics: input.metrics.components.map((m) => ({
             componentId: m.componentId,
@@ -99,6 +125,21 @@ export function optimizationBrief(input: {
             slow: l.slow,
         })),
         heuristicFindings: input.findings,
+        ...(input.aggregate
+            ? {
+                  aggregateEvidence: {
+                      source: input.aggregate.source,
+                      sampleKind: input.aggregate.sampleKind ?? 'live',
+                      window: input.aggregate.window,
+                      population: input.aggregate.population,
+                      baselineSessions: input.metrics.sessions.total,
+                      capabilityUsage: input.aggregate.capabilityUsage,
+                      engagement: input.aggregate.engagement,
+                      navigation: input.aggregate.navigation,
+                      insights: input.aggregate.insights,
+                  },
+              }
+            : {}),
     };
 }
 
@@ -123,6 +164,8 @@ Rules:
 - Reference only component ids that exist in currentSchema. Never hide the only visible component of a required capability.
 - Prefer 1-3 mutations. Every mutation must change something.
 - Base evidence on the numbers provided and mention the sample size honestly. Keep confidence modest when the sample is small.
+- When aggregateEvidence is present, propose the next shared baseline from the completed day's evidence, not another view or a personal layout. Cross-layout capability usage shows preferences, not friction at the current position. Component metrics apply only to baselineSessions. Active time alone is not success; consider outcomes, errors and latency. Runtime menu paths are diagnostic only and are not mutable dashboard components. Return no mutations if there is no justified improvement.
+- If sampleKind is simulated, clearly identify the evidence as a simulated cohort in your reason and explanation. Do not describe it as real users or measured product improvement.
 - Set fields that do not apply to a mutation type to null.`;
 
 export const PERSONALIZATION_INSTRUCTIONS = `You are flow.js, an adaptive interface runtime. Create a complete replacement UI schema for one user's personal dashboard. You receive the current personal (or average) schema and only that user's accumulated behavioral telemetry.

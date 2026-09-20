@@ -1,6 +1,7 @@
 allowBuilds:
     # Only needed for source-map upload; the demo does not upload source maps.
     '@sentry/cli': false
+    esbuild: true
 minimumReleaseAgeExclude:
     - openai@7.19.0
 packages:

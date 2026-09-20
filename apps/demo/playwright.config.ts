@@ -18,7 +18,7 @@ export default defineConfig({
         trace: 'retain-on-failure',
     },
     webServer: {
-        command: `next start --port ${PORT}`,
+        command: `pnpm start --port ${PORT}`,
         url: `http://localhost:${PORT}/api/flow/state`,
         reuseExistingServer: false,
         timeout: 120_000,
@@ -26,6 +26,8 @@ export default defineConfig({
             // A fresh database per run, and recorded AI responses for determinism.
             FLOW_DB_PATH: join(tmpdir(), `flowjs-e2e-${Date.now()}.db`),
             FLOW_AI_MODE: 'recorded',
+            FLOW_ANALYTICS_ENABLED: '0',
+            FLOW_ANALYTICS_SAMPLE_KIND: 'live',
         },
     },
 });

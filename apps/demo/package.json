@@ -7,12 +7,12 @@
         "node": ">=24"
     },
     "scripts": {
-        "dev": "next dev",
-        "build": "next build",
-        "start": "next start",
+        "dev": "node ../../scripts/next.mjs dev",
+        "build": "node ../../scripts/next.mjs build",
+        "start": "node ../../scripts/next.mjs start",
         "typecheck": "tsc --noEmit",
         "test": "vitest run",
-        "test:e2e": "next build && playwright test"
+        "test:e2e": "pnpm build && playwright test"
     },
     "dependencies": {
         "@flowjs/core": "workspace:*",

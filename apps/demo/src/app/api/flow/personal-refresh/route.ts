@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { applyMutations } from '@flowjs/core/flow/mutations';
+import type { UISchema } from '@flowjs/core/flow/schema';
 import { getRuntime, handle } from '@/server/flow';
 
 const RequestBody = z.object({
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
 function savePersonal(
     runtime: ReturnType<typeof getRuntime>,
     userId: string,
-    schema: ReturnType<typeof demoPersonalSchema>
+    schema: UISchema
 ) {
     const average = runtime.store.getActiveVersion(runtime.app.id)!;
     return runtime.store.createPersonalVersion({

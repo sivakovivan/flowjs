@@ -13,6 +13,7 @@ import {
     RuntimeError,
     type OptimizationAnalysis,
 } from './runtime';
+import { diffSchemas } from './schema';
 import { FlowStore } from './store';
 
 const app = fixtureApp();
@@ -205,6 +206,17 @@ describe('personal regeneration', () => {
         expect(second.version.parentVersionId).toBe(first.version.id);
         expect(first.version.schema).not.toEqual(average.schema);
         expect(second.version.schema).not.toEqual(first.version.schema);
+        const visibleChanges = Object.values(
+            diffSchemas(first.version.schema, second.version.schema)
+        );
+        expect(visibleChanges.length).toBeGreaterThanOrEqual(4);
+        expect(
+            visibleChanges.some((changes) =>
+                changes.some(
+                    (change) => change === 'resized' || change === 'swapped'
+                )
+            )
+        ).toBe(true);
         expect(store.getLatestPersonalVersion(app.id, 'person-1')?.id).toBe(
             second.version.id
         );

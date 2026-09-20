@@ -37,6 +37,7 @@ type Tab = 'evidence' | 'telemetry' | 'capabilities';
 const AUTO_APPLY_DELAY_S = 3;
 const METRICS_POLL_MS = 4_000;
 const HIGHLIGHT_MS = 6_000;
+const REGENERATION_REVEAL_MS = 900;
 
 function summarizeChanges(changes: Record<string, ComponentChange[]>): string {
     const counts = Object.values(changes)
@@ -56,8 +57,15 @@ function summarizeChanges(changes: Record<string, ComponentChange[]>): string {
         .filter(([change]) => counts[change])
         .map(([change, label]) => `${counts[change]} ${label}`);
     return details.length
-        ? `Your layout was refreshed · ${details.join(', ')}`
-        : 'Your layout was refreshed';
+        ? `Layout regenerated · ${details.join(', ')}`
+        : 'Layout regenerated';
+}
+
+function regenerationRationale(reason: string): string {
+    return reason
+        .replace(/^Personal layout regenerated:\s*/i, '')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 function themeStyle(theme: StudioState['application']['theme']): CSSProperties {
@@ -92,15 +100,15 @@ export function FlowStudio({
     const [layoutChangeNotice, setLayoutChangeNotice] = useState<string | null>(
         null
     );
+    const [layoutChangeRationale, setLayoutChangeRationale] = useState<
+        string | null
+    >(null);
     const [tab, setTab] = useState<Tab>('telemetry');
     const [historyOpen, setHistoryOpen] = useState(false);
     const [rate, setRate] = useState(0.5);
     const [busy, setBusy] = useState(false);
     const [layoutTrack, setLayoutTrack] = useState<LayoutTrack>('personal');
-    const [personalizing, setPersonalizing] = useState(true);
-    const [personalizeError, setPersonalizeError] = useState<string | null>(
-        null
-    );
+    const [personalizing, setPersonalizing] = useState(false);
     const [notices, setNotices] = useState<Notice[]>([]);
     const noticeId = useRef(0);
 
@@ -122,7 +130,6 @@ export function FlowStudio({
             layouts,
         };
         setStudio(normalized);
-        if (developerMode || !normalized.active) setPersonalizing(false);
         if (developerMode) setLayoutTrack('average');
         setRate(normalized.application.mutationRate);
         return normalized;
@@ -173,51 +180,53 @@ export function FlowStudio({
         [refreshMetrics, refreshState, studio?.active]
     );
 
-    // A page-load session always blocks on one complete personal regeneration.
-    useEffect(() => {
-        if (developerMode || !studio?.active || typeof window === 'undefined')
-            return;
-        const key = `flowjs:personal-refresh:${tracker.sessionId}`;
-        if (sessionStorage.getItem(key)) return;
-        sessionStorage.setItem(key, 'running');
+    async function regeneratePersonal() {
+        if (!studio?.active || personalizing) return;
         setPersonalizing(true);
-        setPersonalizeError(null);
-        api.refreshPersonal(tracker.userId).then(
-            ({ version }) => {
-                const previous =
-                    studio.layouts?.personal ?? studio.layouts?.average;
-                const personalChanges = previous
-                    ? diffSchemas(previous.schema, version.schema)
-                    : {};
-                setChanges(personalChanges);
-                setLayoutChangeNotice(summarizeChanges(personalChanges));
-                setTimeout(() => {
-                    setChanges({});
-                    setLayoutChangeNotice(null);
-                }, HIGHLIGHT_MS);
-                setLayoutTrack('personal');
-                setStudio((current) => {
-                    if (!current) return null;
-                    return {
-                        ...current,
-                        layouts: {
-                            ...(current.layouts ??
-                                defaultLayoutTracks(current.active)),
-                            personal: version,
-                            selected: 'personal',
-                        },
-                    };
-                });
-                sessionStorage.setItem(key, 'completed');
-                setPersonalizing(false);
-            },
-            (error: Error) => {
-                sessionStorage.removeItem(key);
-                setPersonalizeError(error.message);
-                setPersonalizing(false);
-            }
-        );
-    }, [developerMode, studio?.active]);
+        setLayoutChangeRationale(null);
+        setLayoutChangeNotice('Analyzing how you use this dashboard…');
+        try {
+            const [{ version }] = await Promise.all([
+                api.refreshPersonal(tracker.userId),
+                new Promise((resolve) =>
+                    setTimeout(resolve, REGENERATION_REVEAL_MS)
+                ),
+            ]);
+            const previous = displayedVersion;
+            const personalChanges = previous
+                ? diffSchemas(previous.schema, version.schema)
+                : {};
+            setChanges(personalChanges);
+            setLayoutChangeNotice(summarizeChanges(personalChanges));
+            setLayoutChangeRationale(regenerationRationale(version.reason));
+            setLayoutTrack('personal');
+            setStudio((current) => {
+                if (!current) return null;
+                return {
+                    ...current,
+                    layouts: {
+                        ...(current.layouts ??
+                            defaultLayoutTracks(current.active)),
+                        personal: version,
+                        selected: 'personal',
+                    },
+                };
+            });
+            setTimeout(() => {
+                setChanges({});
+            }, HIGHLIGHT_MS);
+        } catch (error) {
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : 'Could not regenerate your layout.';
+            setLayoutChangeNotice(null);
+            setLayoutChangeRationale(null);
+            notify('error', message);
+        } finally {
+            setPersonalizing(false);
+        }
+    }
 
     async function generate() {
         setGenerating(true);
@@ -375,25 +384,8 @@ export function FlowStudio({
             </main>
         );
     }
-    if (!studio || personalizing) {
+    if (!studio) {
         return <main className="studio studio--loading" aria-busy="true" />;
-    }
-
-    if (personalizeError) {
-        return (
-            <main className="studio studio--loading studio--personal-error">
-                <p role="alert">
-                    Could not plan your personal layout: {personalizeError}
-                </p>
-                <button
-                    type="button"
-                    className="chrome-button"
-                    onClick={() => location.reload()}
-                >
-                    Try again
-                </button>
-            </main>
-        );
     }
 
     const active = studio.active;
@@ -509,9 +501,10 @@ export function FlowStudio({
                 ) : (
                     <div className="workspace">
                         <section
-                            className="stage"
+                            className={`stage ${personalizing ? 'is-regenerating' : ''}`}
                             style={themeStyle(studio.application.theme)}
                             aria-label={`${studio.application.name} dashboard`}
+                            aria-busy={personalizing}
                         >
                             {layoutChangeNotice && (
                                 <div
@@ -519,7 +512,27 @@ export function FlowStudio({
                                     role="status"
                                 >
                                     <span aria-hidden="true">↗</span>
-                                    {layoutChangeNotice}
+                                    <div className="layout-change-notice__copy">
+                                        <strong>{layoutChangeNotice}</strong>
+                                        {layoutChangeRationale && (
+                                            <small>
+                                                Why: {layoutChangeRationale}
+                                            </small>
+                                        )}
+                                    </div>
+                                    {layoutChangeRationale && (
+                                        <button
+                                            type="button"
+                                            className="layout-change-notice__close"
+                                            aria-label="Dismiss layout rationale"
+                                            onClick={() => {
+                                                setLayoutChangeNotice(null);
+                                                setLayoutChangeRationale(null);
+                                            }}
+                                        >
+                                            ×
+                                        </button>
+                                    )}
                                 </div>
                             )}
                             <div className="stage__meta">
@@ -527,8 +540,10 @@ export function FlowStudio({
                                     {layoutTrack === 'average'
                                         ? 'Average layout'
                                         : 'Personal layout'}{' '}
-                                    · {displayedVersion.id}:{' '}
-                                    {displayedVersion.reason}
+                                    · {displayedVersion.id}
+                                    {developerMode
+                                        ? `: ${displayedVersion.reason}`
+                                        : ''}
                                 </p>
                                 <div
                                     className="layout-track-toggle"
@@ -658,7 +673,12 @@ export function FlowStudio({
                 )}
 
                 {active && !developerMode && (
-                    <FlowMenu studio={studio} onVersion={transitionTo} />
+                    <FlowMenu
+                        studio={studio}
+                        onVersion={transitionTo}
+                        onRegenerate={regeneratePersonal}
+                        regenerating={personalizing}
+                    />
                 )}
 
                 <div className="notices" aria-live="polite">

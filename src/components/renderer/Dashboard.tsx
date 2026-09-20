@@ -12,12 +12,17 @@ import type {
 } from '@flowjs/core/flow/schema';
 import { useRenderer } from './context';
 import { Primitive } from './primitives';
+import { Card, CardHeader, CardContent } from '../ui/card';
+
+const MotionCard = motion.create(Card);
+const MotionCardHeader = motion.create(CardHeader);
+const MotionCardContent = motion.create(CardContent);
 
 const LAYOUT_TRANSITION = {
     type: 'spring',
-    stiffness: 170,
-    damping: 24,
-    mass: 0.9,
+    stiffness: 105,
+    damping: 19,
+    mass: 1.05,
 } as const;
 
 const CHANGE_LABEL: Record<ComponentChange, string> = {
@@ -34,7 +39,7 @@ function ComponentFrame(props: {
     changes: ComponentChange[] | undefined;
 }) {
     const { component, capability, changes } = props;
-    const ref = useRef<HTMLElement>(null);
+    const ref = useRef<HTMLDivElement>(null);
     const { versionId } = useRenderer();
 
     // component_view fires once per version, when half the component is visible.
@@ -56,7 +61,8 @@ function ComponentFrame(props: {
 
     const isControl = capability.kind !== 'data';
     return (
-        <motion.section
+        <MotionCard
+            role="region"
             ref={ref}
             layout
             layoutId={component.id}
@@ -64,6 +70,7 @@ function ComponentFrame(props: {
             className={`app-card app-card--${capability.kind} app-card--${component.primitive} ${changes ? 'is-changed' : ''}`}
             style={{ gridColumn: `span ${SIZE_SPAN[component.size]}` }}
             data-component={component.id}
+            data-changing={changes ? changes.join(' ') : undefined}
             aria-label={capability.label}
             onPointerEnter={() =>
                 tracker.track(component.id, 'component_hover')
@@ -84,12 +91,15 @@ function ComponentFrame(props: {
                 })
             }
         >
-            <motion.header layout="position" className="app-card__header">
+            <MotionCardHeader
+                layout="position"
+                className="flex flex-row flex-wrap items-center gap-2"
+            >
                 <h2
                     className={
                         isControl
-                            ? 'app-card__title app-card__title--control'
-                            : 'app-card__title'
+                            ? 'm-0 mr-auto text-sm font-medium text-muted-foreground'
+                            : 'm-0 mr-auto text-sm font-semibold'
                     }
                 >
                     {capability.label}
@@ -101,9 +111,9 @@ function ComponentFrame(props: {
                             .join(', ')}
                     </span>
                 )}
-            </motion.header>
+            </MotionCardHeader>
             <AnimatePresence mode="popLayout" initial={false}>
-                <motion.div
+                <MotionCardContent
                     key={component.primitive}
                     className="app-card__body"
                     initial={{ opacity: 0, scale: 0.96 }}
@@ -112,9 +122,9 @@ function ComponentFrame(props: {
                     transition={{ duration: 0.28 }}
                 >
                     <Primitive component={component} capability={capability} />
-                </motion.div>
+                </MotionCardContent>
             </AnimatePresence>
-        </motion.section>
+        </MotionCard>
     );
 }
 

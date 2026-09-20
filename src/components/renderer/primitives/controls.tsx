@@ -1,10 +1,68 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ClientCapability } from '@flowjs/core/client/api';
 import { tracker } from '@flowjs/core/client/telemetry';
 import type { UIComponent } from '@flowjs/core/flow/schema';
 import { useRenderer } from '../context';
+import { Button } from '../../ui/button';
+import { ButtonGroup } from '../../ui/button-group';
+import { Input } from '../../ui/input';
+import {
+    Select,
+    SelectTrigger,
+    SelectValue,
+    SelectContent,
+    SelectItem,
+} from '../../ui/select';
+import { ToggleGroup, ToggleGroupItem } from '../../ui/toggle-group';
+
+/** Portal into the owning dashboard so developer theme variables are inherited. */
+function ChoiceSelect({
+    label,
+    value,
+    options,
+    onChange,
+    onStart,
+    compact = false,
+}: {
+    label: string;
+    value: string;
+    options: { value: string; label: string }[];
+    onChange: (value: string) => void;
+    onStart: () => void;
+    compact?: boolean;
+}) {
+    const [container, setContainer] = useState<HTMLElement | null>(null);
+    const triggerRef = useCallback((node: HTMLButtonElement | null) => {
+        setContainer(node?.closest<HTMLElement>('.stage') ?? null);
+    }, []);
+    return (
+        <Select
+            value={value}
+            onValueChange={onChange}
+            onOpenChange={(open) => {
+                if (open) onStart();
+            }}
+        >
+            <SelectTrigger
+                ref={triggerRef}
+                aria-label={label}
+                className={compact ? 'w-auto' : 'w-full'}
+                onFocus={onStart}
+            >
+                <SelectValue />
+            </SelectTrigger>
+            <SelectContent container={container} position="popper">
+                {options.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    );
+}
 
 type StateCapability = Extract<ClientCapability, { kind: 'state' }>;
 type ActionCapability = Extract<ClientCapability, { kind: 'action' }>;
@@ -20,24 +78,18 @@ const optionLabel = (capability: StateCapability, option: string) =>
 export function Dropdown({ component, capability }: StateProps) {
     const { state, setStateValue } = useRenderer();
     return (
-        <select
-            className="app-select"
-            aria-label={capability.label}
+        <ChoiceSelect
+            label={capability.label}
             value={state[capability.id] ?? capability.default}
-            onPointerDown={() =>
-                tracker.track(component.id, 'interaction_start')
+            options={capability.options.map((option) => ({
+                value: option,
+                label: optionLabel(capability, option),
+            }))}
+            onStart={() => tracker.track(component.id, 'interaction_start')}
+            onChange={(value) =>
+                setStateValue(component.id, capability.id, value)
             }
-            onFocus={() => tracker.track(component.id, 'interaction_start')}
-            onChange={(event) =>
-                setStateValue(component.id, capability.id, event.target.value)
-            }
-        >
-            {capability.options.map((option) => (
-                <option key={option} value={option}>
-                    {optionLabel(capability, option)}
-                </option>
-            ))}
-        </select>
+        />
     );
 }
 
@@ -50,27 +102,29 @@ export function OptionButtons({
     const { state, setStateValue } = useRenderer();
     const current = state[capability.id] ?? capability.default;
     return (
-        <div
-            className={segmented ? 'app-segmented' : 'app-button-group'}
+        <ToggleGroup
+            type="single"
             role="radiogroup"
+            variant="outline"
+            spacing={segmented ? 0 : 2}
+            className="max-w-full flex-wrap"
             aria-label={capability.label}
+            value={current}
+            onValueChange={(value) => {
+                if (value && value !== current)
+                    setStateValue(component.id, capability.id, value);
+            }}
         >
             {capability.options.map((option) => (
-                <button
+                <ToggleGroupItem
                     key={option}
-                    type="button"
-                    role="radio"
-                    aria-checked={option === current}
-                    className={option === current ? 'is-active' : undefined}
-                    onClick={() =>
-                        option !== current &&
-                        setStateValue(component.id, capability.id, option)
-                    }
+                    value={option}
+                    className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
                 >
                     {optionLabel(capability, option)}
-                </button>
+                </ToggleGroupItem>
             ))}
-        </div>
+        </ToggleGroup>
     );
 }
 
@@ -91,9 +145,8 @@ export function SearchField({ component, capability }: StateProps) {
     }, [draft, component.id, capability.id, setStateValue]);
 
     return (
-        <input
+        <Input
             type="search"
-            className="app-input"
             placeholder={`Search ${capability.description.toLowerCase().replace(/^free-text search over /, '')}`}
             aria-label={capability.label}
             value={draft}
@@ -129,11 +182,14 @@ function useAction(component: UIComponent, capability: ActionCapability) {
         tracker.track(component.id, 'component_click', extra);
         if (running || missing.length > 0) return;
         setRunning(true);
-        await runAction(capability.id, component.id, {
-            ...(boundValues as Record<string, string>),
-            ...extra,
-        });
-        setRunning(false);
+        try {
+            await runAction(capability.id, component.id, {
+                ...(boundValues as Record<string, string>),
+                ...extra,
+            });
+        } finally {
+            setRunning(false);
+        }
     }
 
     return { run, running, missing, boundValues };
@@ -160,25 +216,23 @@ export function ActionButton({ component, capability }: ActionProps) {
     return (
         <div className="app-action">
             {choice && (
-                <select
-                    className="app-select app-select--compact"
-                    aria-label={choice.name}
+                <ChoiceSelect
+                    compact
+                    label={choice.name}
                     value={option}
-                    onFocus={() =>
+                    options={choice.options.map((value) => ({
+                        value,
+                        label: value.toUpperCase(),
+                    }))}
+                    onStart={() =>
                         tracker.track(component.id, 'interaction_start')
                     }
-                    onChange={(event) => setOption(event.target.value)}
-                >
-                    {choice.options.map((o) => (
-                        <option key={o} value={o}>
-                            {o.toUpperCase()}
-                        </option>
-                    ))}
-                </select>
+                    onChange={setOption}
+                />
             )}
-            <button
+            <Button
                 type="button"
-                className="app-button"
+                className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
                 aria-disabled={missing.length > 0 || running}
                 aria-busy={running}
                 onClick={() => run(choice ? { [choice.name]: option } : {})}
@@ -188,7 +242,7 @@ export function ActionButton({ component, capability }: ActionProps) {
                     : target
                       ? `${capability.label} ${target}`
                       : capability.label}
-            </button>
+            </Button>
             {missing.length > 0 && (
                 <p className="app-hint">
                     Select a row in {missing.join(', ')} first.
@@ -199,28 +253,31 @@ export function ActionButton({ component, capability }: ActionProps) {
 }
 
 export function ActionButtonGroup({ component, capability }: ActionProps) {
-    const { run, running } = useAction(component, capability);
+    const { run, running, missing } = useAction(component, capability);
     const choice = enumInput(capability);
     if (!choice)
         return <ActionButton component={component} capability={capability} />;
     const verb = capability.label.split(' ')[0];
     return (
-        <div
-            className="app-button-group"
+        <ButtonGroup
+            orientation={component.size === 'small' ? 'vertical' : 'horizontal'}
+            className="max-w-full flex-wrap"
             role="group"
             aria-label={capability.label}
         >
             {choice.options.map((option) => (
-                <button
+                <Button
                     key={option}
                     type="button"
-                    className="app-button app-button--quiet"
+                    variant="outline"
+                    className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
                     aria-busy={running}
+                    aria-disabled={running || missing.length > 0}
                     onClick={() => run({ [choice.name]: option })}
                 >
                     {verb} {option.toUpperCase()}
-                </button>
+                </Button>
             ))}
-        </div>
+        </ButtonGroup>
     );
 }

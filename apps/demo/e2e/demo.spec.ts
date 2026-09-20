@@ -18,7 +18,7 @@ async function setMutationRate(page: Page, rate: number) {
     await saved;
 }
 
-test('capabilities in, adaptive interface out', async ({ page }) => {
+test('capabilities in, adaptive interface out', async ({ page }, testInfo) => {
     await page.goto('/developer');
     await expect(
         page.getByRole('heading', { name: 'No dashboard layout was written.' })
@@ -29,11 +29,40 @@ test('capabilities in, adaptive interface out', async ({ page }) => {
         page.locator('.stage').getByText('Recorded response')
     ).toBeVisible();
 
+    await expect(
+        page.locator('[data-component="revenue-chart"]')
+    ).toHaveAttribute('data-slot', 'card');
+    await expect(
+        page
+            .locator('[data-component="revenue-chart"] [data-slot="chart"] svg')
+            .first()
+    ).toBeVisible();
+    await expect(
+        page.locator(
+            '[data-component="transactions-table"] [data-slot="table"]'
+        )
+    ).toBeVisible();
+    await page.screenshot({
+        path: testInfo.outputPath('shadcn-dashboard.png'),
+        fullPage: true,
+    });
+
     // Use it: date range → revenue chart, repeatedly, then export.
     const dateRange = page.getByRole('combobox', { name: 'Date range' });
     for (const range of ['7d', '90d', '30d']) {
         await dateRange.scrollIntoViewIfNeeded();
-        await dateRange.selectOption(range);
+        await dateRange.click();
+        await expect(
+            page.locator('.stage [data-slot="select-content"]')
+        ).toBeVisible();
+        await page
+            .getByRole('option', {
+                name: { '7d': '7 days', '90d': '90 days', '30d': '30 days' }[
+                    range
+                ],
+                exact: true,
+            })
+            .click();
         await page
             .locator('[data-component="revenue-chart"] .app-chart')
             .click();
@@ -150,8 +179,11 @@ test('retries on a slow backend are diagnosed as performance, not redesigned', a
     const exportPdf = page.getByRole('button', { name: 'Export PDF' });
     // Impatient user: clicks again while the slow PDF export is still running.
     await exportPdf.click();
-    await exportPdf.click();
-    await exportPdf.click();
+    await expect(exportPdf).toHaveAttribute('aria-busy', 'true');
+    // Force physical clicks because Playwright otherwise waits for aria-disabled
+    // to clear and starts a second export instead of simulating an impatient user.
+    await exportPdf.click({ force: true });
+    await exportPdf.click({ force: true });
     await expect(
         page.getByText(/PDF report for \d+ transactions is ready/)
     ).toBeVisible({ timeout: 10_000 });
@@ -180,11 +212,19 @@ test('retries on a slow backend are diagnosed as performance, not redesigned', a
     await expect(versionBadge(page)).toHaveText('v3');
 });
 
-test('every user refresh creates and displays a changed personal version', async ({
+test('refresh keeps the layout and the regenerate button visibly changes it', async ({
     page,
 }) => {
     await page.goto('/');
-    await expect(page.getByText(/^Personal layout · p/)).toBeVisible();
+    const controls = page.getByRole('button', {
+        name: 'flow.js controls',
+        exact: true,
+    });
+    await controls.click();
+    await expect(
+        page.getByRole('button', { name: 'Regenerate layout' })
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
     const firstLabel = await page.locator('.stage__meta p').innerText();
     const firstOrder = await page
         .locator('[data-component]')
@@ -193,9 +233,25 @@ test('every user refresh creates and displays a changed personal version', async
         );
 
     await page.reload();
-    await expect(page.getByText(/^Personal layout · p/)).toBeVisible();
+    await expect(page.locator('.stage__meta p')).toHaveText(firstLabel);
+    const reloadedOrder = await page
+        .locator('[data-component]')
+        .evaluateAll((nodes) =>
+            nodes.map((node) => node.getAttribute('data-component'))
+        );
+    expect(reloadedOrder).toEqual(firstOrder);
+
+    await controls.click();
+    await page.getByRole('button', { name: 'Regenerate layout' }).click();
+    await expect(page.locator('.stage')).toHaveAttribute('aria-busy', 'true');
     await expect(page.locator('.layout-change-notice')).toContainText(
-        'Your layout was refreshed'
+        'Layout regenerated'
+    );
+    await expect(page.locator('.layout-change-notice')).toContainText(
+        'Why: Headline revenue and order totals lead'
+    );
+    await expect(page.locator('.layout-change-notice')).toContainText(
+        'Secondary views, the date filter and account tools follow below.'
     );
     await expect(page.locator('.change-tag')).not.toHaveCount(0);
     const secondLabel = await page.locator('.stage__meta p').innerText();
@@ -207,4 +263,12 @@ test('every user refresh creates and displays a changed personal version', async
 
     expect(secondLabel).not.toBe(firstLabel);
     expect(secondOrder).not.toEqual(firstOrder);
+
+    // The rationale is persistent and leaves only when the user dismisses it.
+    await page.waitForTimeout(6_100);
+    await expect(page.locator('.layout-change-notice')).toBeVisible();
+    await page
+        .getByRole('button', { name: 'Dismiss layout rationale' })
+        .click();
+    await expect(page.locator('.layout-change-notice')).toBeHidden();
 });

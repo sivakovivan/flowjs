@@ -4,7 +4,6 @@ import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import { useEffect, useRef } from 'react';
 import type { ClientCapability } from '@flowjs/core/client/api';
 import { tracker } from '@flowjs/core/client/telemetry';
-import type { ComponentMetrics } from '@flowjs/core/flow/metrics';
 import { SIZE_SPAN } from '@flowjs/core/flow/primitives';
 import type {
     ComponentChange,
@@ -29,31 +28,12 @@ const CHANGE_LABEL: Record<ComponentChange, string> = {
     hidden: 'Hidden',
 };
 
-function formatSeconds(ms: number | null) {
-    return ms === null ? '–' : `${(ms / 1000).toFixed(1)}s`;
-}
-
-function TelemetryChip({ metrics }: { metrics: ComponentMetrics }) {
-    return (
-        <span
-            className="telemetry-chip"
-            title={`Used in ${Math.round(metrics.usageRate * 100)}% of sessions, found after ${formatSeconds(metrics.avgDiscoveryMs)} on average, ${metrics.interactions} interactions`}
-        >
-            <span>{Math.round(metrics.usageRate * 100)}%</span>
-            <span>{formatSeconds(metrics.avgDiscoveryMs)}</span>
-            <span>{metrics.interactions}×</span>
-        </span>
-    );
-}
-
 function ComponentFrame(props: {
     component: UIComponent;
     capability: ClientCapability;
-    metrics: ComponentMetrics | undefined;
     changes: ComponentChange[] | undefined;
-    showTelemetry: boolean;
 }) {
-    const { component, capability, metrics, changes } = props;
+    const { component, capability, changes } = props;
     const ref = useRef<HTMLElement>(null);
     const { versionId } = useRenderer();
 
@@ -85,6 +65,24 @@ function ComponentFrame(props: {
             style={{ gridColumn: `span ${SIZE_SPAN[component.size]}` }}
             data-component={component.id}
             aria-label={capability.label}
+            onPointerEnter={() =>
+                tracker.track(component.id, 'component_hover')
+            }
+            onFocusCapture={() =>
+                tracker.track(component.id, 'component_focus')
+            }
+            onPointerDown={(event) => {
+                const target = event.target as HTMLElement;
+                if (target.closest(':disabled, [aria-disabled="true"]'))
+                    tracker.track(component.id, 'disabled_interaction', {
+                        element: target.tagName.toLowerCase(),
+                    });
+            }}
+            onWheel={(event) =>
+                tracker.track(component.id, 'component_scroll', {
+                    direction: event.deltaY > 0 ? 'forward' : 'backward',
+                })
+            }
         >
             <motion.header layout="position" className="app-card__header">
                 <h2
@@ -102,9 +100,6 @@ function ComponentFrame(props: {
                             .map((change) => CHANGE_LABEL[change])
                             .join(', ')}
                     </span>
-                )}
-                {props.showTelemetry && metrics && metrics.interactions > 0 && (
-                    <TelemetryChip metrics={metrics} />
                 )}
             </motion.header>
             <AnimatePresence mode="popLayout" initial={false}>
@@ -125,9 +120,7 @@ function ComponentFrame(props: {
 
 export function Dashboard(props: {
     schema: UISchema;
-    metrics: Map<string, ComponentMetrics>;
     changes: Record<string, ComponentChange[]>;
-    showTelemetry: boolean;
 }) {
     const { capabilities } = useRenderer();
     const components = [...props.schema.components]
@@ -145,9 +138,7 @@ export function Dashboard(props: {
                             key={component.id}
                             component={component}
                             capability={capability}
-                            metrics={props.metrics.get(component.id)}
                             changes={props.changes[component.id]}
-                            showTelemetry={props.showTelemetry}
                         />
                     );
                 })}

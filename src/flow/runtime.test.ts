@@ -67,6 +67,7 @@ function stub(overrides: Partial<FlowAIProvider>): FlowAIProvider {
         source: 'live',
         model: 'stub-model',
         generateSchema: async () => structuredClone(generation),
+        generatePersonalSchema: async () => structuredClone(generation),
         proposeOptimization: async () => structuredClone(promoteDateRange),
         ...overrides,
     };
@@ -157,10 +158,10 @@ describe('generate', () => {
         expect(provenance?.source).toBe('recorded');
     });
 
-    it('uses recordings without an API key or when recorded mode is forced', async () => {
-        expect(
-            (await runtime(null).generate()).provenance?.fallbackReason
-        ).toMatch(/OPENAI_API_KEY/);
+    it('requires an API key unless recorded mode is explicitly forced', async () => {
+        await expect(runtime(null).generate()).rejects.toThrow(
+            /OPENAI_API_KEY is required/
+        );
         store = new FlowStore(':memory:');
         let liveCalled = false;
         const live = stub({
@@ -188,6 +189,25 @@ describe('generate', () => {
         });
         await expect(rt.generate()).rejects.toThrow(/No recorded responses/);
         expect(store.listVersions(app.id)).toEqual([]);
+    });
+});
+
+describe('personal regeneration', () => {
+    it('always creates a changed full-schema version and chains personal history', async () => {
+        const rt = runtime(stub({}));
+        const average = (await rt.generate()).version;
+        store.setMutationRate(app.id, 0);
+
+        const first = await rt.regeneratePersonal('person-1');
+        const second = await rt.regeneratePersonal('person-1');
+
+        expect(first.version.parentVersionId).toBe(average.id);
+        expect(second.version.parentVersionId).toBe(first.version.id);
+        expect(first.version.schema).not.toEqual(average.schema);
+        expect(second.version.schema).not.toEqual(first.version.schema);
+        expect(store.getLatestPersonalVersion(app.id, 'person-1')?.id).toBe(
+            second.version.id
+        );
     });
 });
 

@@ -1,5 +1,11 @@
 import { withSentryConfig } from '@sentry/nextjs/config';
+import { loadEnvConfig } from '@next/env';
+import path from 'node:path';
 import type { NextConfig } from 'next';
+
+// The workspace keeps local credentials at the repository root while Next
+// runs with apps/demo as its project directory.
+loadEnvConfig(path.resolve(process.cwd(), '../..'));
 
 const nextConfig: NextConfig = {
     transpilePackages: ['@flowjs/core'],

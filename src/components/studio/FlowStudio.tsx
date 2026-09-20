@@ -4,7 +4,6 @@ import { MotionConfig } from 'motion/react';
 import {
     useCallback,
     useEffect,
-    useMemo,
     useRef,
     useState,
     type CSSProperties,
@@ -27,12 +26,39 @@ import { GeneratePrompt } from './GeneratePrompt';
 import { HistoryMenu } from './HistoryMenu';
 import { SourceBadge } from './SourceBadge';
 import { TelemetryPanel } from './TelemetryPanel';
+import { FlowMenu } from './FlowMenu';
+import {
+    defaultLayoutTracks,
+    type LayoutTrack,
+} from '@flowjs/core/flow/layout-tracks';
 
 type Tab = 'evidence' | 'telemetry' | 'capabilities';
 
 const AUTO_APPLY_DELAY_S = 3;
 const METRICS_POLL_MS = 4_000;
 const HIGHLIGHT_MS = 6_000;
+
+function summarizeChanges(changes: Record<string, ComponentChange[]>): string {
+    const counts = Object.values(changes)
+        .flat()
+        .reduce<Partial<Record<ComponentChange, number>>>((result, change) => {
+            result[change] = (result[change] ?? 0) + 1;
+            return result;
+        }, {});
+    const labels: Array<[ComponentChange, string]> = [
+        ['moved', 'moved'],
+        ['resized', 'resized'],
+        ['swapped', 'changed control'],
+        ['shown', 'shown'],
+        ['hidden', 'hidden'],
+    ];
+    const details = labels
+        .filter(([change]) => counts[change])
+        .map(([change, label]) => `${counts[change]} ${label}`);
+    return details.length
+        ? `Your layout was refreshed · ${details.join(', ')}`
+        : 'Your layout was refreshed';
+}
 
 function themeStyle(theme: StudioState['application']['theme']): CSSProperties {
     return {
@@ -46,7 +72,11 @@ function themeStyle(theme: StudioState['application']['theme']): CSSProperties {
     } as CSSProperties;
 }
 
-export function FlowStudio() {
+export function FlowStudio({
+    developerMode = false,
+}: {
+    developerMode?: boolean;
+}) {
     const [studio, setStudio] = useState<StudioState | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [generating, setGenerating] = useState(false);
@@ -59,11 +89,18 @@ export function FlowStudio() {
     const [changes, setChanges] = useState<Record<string, ComponentChange[]>>(
         {}
     );
+    const [layoutChangeNotice, setLayoutChangeNotice] = useState<string | null>(
+        null
+    );
     const [tab, setTab] = useState<Tab>('telemetry');
     const [historyOpen, setHistoryOpen] = useState(false);
-    const [showTelemetry, setShowTelemetry] = useState(true);
     const [rate, setRate] = useState(0.5);
     const [busy, setBusy] = useState(false);
+    const [layoutTrack, setLayoutTrack] = useState<LayoutTrack>('personal');
+    const [personalizing, setPersonalizing] = useState(true);
+    const [personalizeError, setPersonalizeError] = useState<string | null>(
+        null
+    );
     const [notices, setNotices] = useState<Notice[]>([]);
     const noticeId = useRef(0);
 
@@ -77,11 +114,19 @@ export function FlowStudio() {
     }, []);
 
     const refreshState = useCallback(async () => {
-        const next = await api.state();
-        setStudio(next);
-        setRate(next.application.mutationRate);
-        return next;
-    }, []);
+        const next = await api.state(tracker.userId);
+        // Keep clients compatible with an older API process during rolling deploys.
+        const layouts = next.layouts ?? defaultLayoutTracks(next.active);
+        const normalized = {
+            ...next,
+            layouts,
+        };
+        setStudio(normalized);
+        if (developerMode || !normalized.active) setPersonalizing(false);
+        if (developerMode) setLayoutTrack('average');
+        setRate(normalized.application.mutationRate);
+        return normalized;
+    }, [developerMode]);
 
     const refreshMetrics = useCallback(async () => {
         try {
@@ -96,6 +141,10 @@ export function FlowStudio() {
     }, [refreshState]);
 
     const activeId = studio?.active?.id ?? null;
+    const displayedVersion =
+        layoutTrack === 'personal'
+            ? (studio?.layouts?.personal ?? studio?.layouts?.average)
+            : studio?.layouts?.average;
     useEffect(() => {
         if (!activeId) return;
         refreshMetrics();
@@ -116,12 +165,59 @@ export function FlowStudio() {
             setStudio((current) =>
                 current ? { ...current, active: version } : current
             );
+            setLayoutTrack('average');
             setTimeout(() => setChanges({}), HIGHLIGHT_MS);
             await refreshState();
             refreshMetrics();
         },
         [refreshMetrics, refreshState, studio?.active]
     );
+
+    // A page-load session always blocks on one complete personal regeneration.
+    useEffect(() => {
+        if (developerMode || !studio?.active || typeof window === 'undefined')
+            return;
+        const key = `flowjs:personal-refresh:${tracker.sessionId}`;
+        if (sessionStorage.getItem(key)) return;
+        sessionStorage.setItem(key, 'running');
+        setPersonalizing(true);
+        setPersonalizeError(null);
+        api.refreshPersonal(tracker.userId).then(
+            ({ version }) => {
+                const previous =
+                    studio.layouts?.personal ?? studio.layouts?.average;
+                const personalChanges = previous
+                    ? diffSchemas(previous.schema, version.schema)
+                    : {};
+                setChanges(personalChanges);
+                setLayoutChangeNotice(summarizeChanges(personalChanges));
+                setTimeout(() => {
+                    setChanges({});
+                    setLayoutChangeNotice(null);
+                }, HIGHLIGHT_MS);
+                setLayoutTrack('personal');
+                setStudio((current) => {
+                    if (!current) return null;
+                    return {
+                        ...current,
+                        layouts: {
+                            ...(current.layouts ??
+                                defaultLayoutTracks(current.active)),
+                            personal: version,
+                            selected: 'personal',
+                        },
+                    };
+                });
+                sessionStorage.setItem(key, 'completed');
+                setPersonalizing(false);
+            },
+            (error: Error) => {
+                sessionStorage.removeItem(key);
+                setPersonalizeError(error.message);
+                setPersonalizing(false);
+            }
+        );
+    }, [developerMode, studio?.active]);
 
     async function generate() {
         setGenerating(true);
@@ -270,17 +366,6 @@ export function FlowStudio() {
         }
     }
 
-    const componentMetrics = useMemo(
-        () =>
-            new Map(
-                (metrics?.versionId === activeId
-                    ? metrics.metrics.components
-                    : []
-                ).map((m) => [m.componentId, m])
-            ),
-        [metrics, activeId]
-    );
-
     if (loadError) {
         return (
             <main className="studio studio--error">
@@ -290,8 +375,25 @@ export function FlowStudio() {
             </main>
         );
     }
-    if (!studio) {
+    if (!studio || personalizing) {
         return <main className="studio studio--loading" aria-busy="true" />;
+    }
+
+    if (personalizeError) {
+        return (
+            <main className="studio studio--loading studio--personal-error">
+                <p role="alert">
+                    Could not plan your personal layout: {personalizeError}
+                </p>
+                <button
+                    type="button"
+                    className="chrome-button"
+                    onClick={() => location.reload()}
+                >
+                    Try again
+                </button>
+            </main>
+        );
     }
 
     const active = studio.active;
@@ -310,7 +412,9 @@ export function FlowStudio() {
 
     return (
         <MotionConfig reducedMotion="user">
-            <main className="studio">
+            <main
+                className={`studio ${developerMode ? 'studio--developer' : 'studio--user'}`}
+            >
                 <header className="bar">
                     <div className="bar__brand">
                         <span className="wordmark">flow.js</span>
@@ -319,7 +423,7 @@ export function FlowStudio() {
                         </span>
                     </div>
 
-                    {active && (
+                    {active && developerMode && (
                         <div className="bar__versions">
                             <span
                                 className="version-badge"
@@ -358,7 +462,7 @@ export function FlowStudio() {
                         </div>
                     )}
 
-                    {active && (
+                    {active && developerMode && (
                         <div className="bar__controls">
                             <label className="rate">
                                 <span className="rate__ends">
@@ -395,7 +499,7 @@ export function FlowStudio() {
                     )}
                 </header>
 
-                {!active ? (
+                {!displayedVersion ? (
                     <GeneratePrompt
                         studio={studio}
                         generating={generating}
@@ -409,11 +513,55 @@ export function FlowStudio() {
                             style={themeStyle(studio.application.theme)}
                             aria-label={`${studio.application.name} dashboard`}
                         >
+                            {layoutChangeNotice && (
+                                <div
+                                    className="layout-change-notice"
+                                    role="status"
+                                >
+                                    <span aria-hidden="true">↗</span>
+                                    {layoutChangeNotice}
+                                </div>
+                            )}
                             <div className="stage__meta">
                                 <p>
-                                    Generated interface, {active.id}:{' '}
-                                    {active.reason}
+                                    {layoutTrack === 'average'
+                                        ? 'Average layout'
+                                        : 'Personal layout'}{' '}
+                                    · {displayedVersion.id}:{' '}
+                                    {displayedVersion.reason}
                                 </p>
+                                <div
+                                    className="layout-track-toggle"
+                                    role="group"
+                                    aria-label="Layout version"
+                                >
+                                    <button
+                                        type="button"
+                                        className={
+                                            layoutTrack === 'average'
+                                                ? 'is-active'
+                                                : undefined
+                                        }
+                                        onClick={() =>
+                                            setLayoutTrack('average')
+                                        }
+                                    >
+                                        Average
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={
+                                            layoutTrack === 'personal'
+                                                ? 'is-active'
+                                                : undefined
+                                        }
+                                        onClick={() =>
+                                            setLayoutTrack('personal')
+                                        }
+                                    >
+                                        My layout
+                                    </button>
+                                </div>
                                 {generatedProvenance &&
                                     active.source === 'generated' && (
                                         <SourceBadge
@@ -424,94 +572,93 @@ export function FlowStudio() {
                                             }
                                         />
                                     )}
-                                <label className="toggle">
-                                    <input
-                                        type="checkbox"
-                                        checked={showTelemetry}
-                                        onChange={(e) =>
-                                            setShowTelemetry(e.target.checked)
-                                        }
-                                    />
-                                    Show telemetry
-                                </label>
                             </div>
                             <RendererProvider
-                                versionId={active.id}
+                                versionId={displayedVersion.id}
                                 capabilities={studio.capabilities}
                                 initialState={studio.defaultState}
                                 notify={notify}
                             >
                                 <Dashboard
-                                    schema={active.schema}
-                                    metrics={componentMetrics}
+                                    schema={displayedVersion.schema}
                                     changes={changes}
-                                    showTelemetry={showTelemetry}
                                 />
                             </RendererProvider>
                         </section>
 
-                        <aside className="panel" aria-label="flow.js runtime">
-                            <div className="tabs" role="tablist">
-                                {(
-                                    [
-                                        'telemetry',
-                                        'evidence',
-                                        'capabilities',
-                                    ] as const
-                                ).map((name) => (
-                                    <button
-                                        key={name}
-                                        type="button"
-                                        role="tab"
-                                        aria-selected={tab === name}
-                                        className={
-                                            tab === name
-                                                ? 'is-active'
-                                                : undefined
-                                        }
-                                        onClick={() => setTab(name)}
-                                    >
-                                        {name === 'telemetry'
-                                            ? 'Telemetry'
-                                            : name === 'evidence'
-                                              ? 'Optimization'
-                                              : 'Capabilities'}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="panel__body" role="tabpanel">
-                                {tab === 'telemetry' && (
-                                    <TelemetryPanel
-                                        data={metrics}
-                                        onSeed={seed}
-                                        onClearSeeded={clearSeeded}
-                                        busy={busy}
-                                    />
-                                )}
-                                {tab === 'evidence' && (
-                                    <EvidencePanel
-                                        run={run}
-                                        optimizing={optimizing}
-                                        countdown={countdown}
-                                        applying={applying}
-                                        sentryOrg={studio.sentry.org}
-                                        onApply={() =>
-                                            run && apply(run, 'manual')
-                                        }
-                                        onCancelAuto={() => setCountdown(null)}
-                                    />
-                                )}
-                                {tab === 'capabilities' && (
-                                    <CapabilitiesPanel studio={studio} />
-                                )}
-                            </div>
-                            <p className="panel__foot">
-                                {studio.sentry.enabled
-                                    ? 'Sentry tracing and replay are on.'
-                                    : 'Sentry is off (no DSN); latency is still measured locally.'}
-                            </p>
-                        </aside>
+                        {developerMode && (
+                            <aside
+                                className="panel"
+                                aria-label="flow.js developer console"
+                            >
+                                <div className="tabs" role="tablist">
+                                    {(
+                                        [
+                                            'telemetry',
+                                            'evidence',
+                                            'capabilities',
+                                        ] as const
+                                    ).map((name) => (
+                                        <button
+                                            key={name}
+                                            type="button"
+                                            role="tab"
+                                            aria-selected={tab === name}
+                                            className={
+                                                tab === name
+                                                    ? 'is-active'
+                                                    : undefined
+                                            }
+                                            onClick={() => setTab(name)}
+                                        >
+                                            {name === 'telemetry'
+                                                ? 'Telemetry'
+                                                : name === 'evidence'
+                                                  ? 'Optimization'
+                                                  : 'Capabilities'}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="panel__body" role="tabpanel">
+                                    {tab === 'telemetry' && (
+                                        <TelemetryPanel
+                                            data={metrics}
+                                            onSeed={seed}
+                                            onClearSeeded={clearSeeded}
+                                            busy={busy}
+                                        />
+                                    )}
+                                    {tab === 'evidence' && (
+                                        <EvidencePanel
+                                            run={run}
+                                            optimizing={optimizing}
+                                            countdown={countdown}
+                                            applying={applying}
+                                            sentryOrg={studio.sentry.org}
+                                            onApply={() =>
+                                                run && apply(run, 'manual')
+                                            }
+                                            onCancelAuto={() =>
+                                                setCountdown(null)
+                                            }
+                                        />
+                                    )}
+                                    {tab === 'capabilities' && (
+                                        <CapabilitiesPanel studio={studio} />
+                                    )}
+                                </div>
+                                <p className="panel__foot">
+                                    {studio.sentry.enabled
+                                        ? 'Sentry tracing and replay are on.'
+                                        : 'Sentry is off (no DSN); latency is still measured locally.'}
+                                </p>
+                            </aside>
+                        )}
                     </div>
+                )}
+
+                {active && !developerMode && (
+                    <FlowMenu studio={studio} onVersion={transitionTo} />
                 )}
 
                 <div className="notices" aria-live="polite">

@@ -44,6 +44,10 @@ export interface ApplicationRecord {
 
 export const TELEMETRY_EVENT_TYPES = [
     'component_view',
+    'component_hover',
+    'component_scroll',
+    'component_focus',
+    'disabled_interaction',
     'component_click',
     'value_change',
     'interaction_start',
@@ -208,6 +212,17 @@ CREATE TABLE IF NOT EXISTS optimization_runs (
   applied_version_id TEXT,
   created_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS personal_versions (
+  id TEXT PRIMARY KEY,
+  application_id TEXT NOT NULL REFERENCES applications(id),
+  user_id TEXT NOT NULL,
+  parent_version_id TEXT NOT NULL,
+  config_json TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS personal_versions_user ON personal_versions (application_id, user_id, created_at);
 `;
 
 type Row = Record<string, unknown>;
@@ -231,6 +246,26 @@ function toVersion(row: Row): VersionRecord {
         source: row.source as VersionSource,
         aiSource: (row.ai_source as AISource | null) ?? null,
         optimizationRunId: (row.optimization_run_id as string | null) ?? null,
+        createdAt: Number(row.created_at),
+    };
+}
+
+function toPersonalVersion(row: Row, parent: VersionRecord): VersionRecord {
+    return {
+        ...parent,
+        id: row.id as string,
+        parentVersionId: row.parent_version_id as string,
+        schema: parse(row.config_json, { components: [] }),
+        mutations: [],
+        reason: row.reason as string,
+        evidence: {
+            scope: 'personal',
+            userId: row.user_id as string,
+        },
+        telemetrySnapshot: null,
+        source: 'generated',
+        aiSource: null,
+        optimizationRunId: null,
         createdAt: Number(row.created_at),
     };
 }
@@ -367,6 +402,84 @@ export class FlowStore {
     }
 
     // ── versions ──────────────────────────────────────────────────────────────
+
+    createPersonalVersion(input: {
+        applicationId: string;
+        userId: string;
+        parentVersionId: string;
+        schema: UISchema;
+        reason: string;
+    }): VersionRecord {
+        const parent =
+            this.getVersion(input.applicationId, input.parentVersionId) ??
+            this.getPersonalVersion(
+                input.applicationId,
+                input.userId,
+                input.parentVersionId
+            );
+        if (!parent)
+            throw new VersionError(
+                `Parent version "${input.parentVersionId}" does not exist.`
+            );
+        const id = `p${randomUUID().slice(0, 8)}`;
+        this.db
+            .prepare(
+                `INSERT INTO personal_versions (id, application_id, user_id, parent_version_id, config_json, reason, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`
+            )
+            .run(
+                id,
+                input.applicationId,
+                input.userId,
+                input.parentVersionId,
+                JSON.stringify(input.schema),
+                input.reason,
+                this.now()
+            );
+        return {
+            ...parent,
+            id,
+            parentVersionId: input.parentVersionId,
+            schema: input.schema,
+            mutations: [],
+            reason: input.reason,
+            evidence: { scope: 'personal', userId: input.userId },
+            createdAt: this.now(),
+        };
+    }
+
+    getPersonalVersion(
+        applicationId: string,
+        userId: string,
+        id: string
+    ): VersionRecord | null {
+        const row = this.db
+            .prepare(
+                'SELECT * FROM personal_versions WHERE application_id = ? AND user_id = ? AND id = ?'
+            )
+            .get(applicationId, userId, id) as Row | undefined;
+        if (!row) return null;
+        const average = this.getVersion(
+            applicationId,
+            row.parent_version_id as string
+        );
+        const fallback = average ?? this.getActiveVersion(applicationId);
+        return fallback ? toPersonalVersion(row, fallback) : null;
+    }
+
+    getLatestPersonalVersion(
+        applicationId: string,
+        userId: string
+    ): VersionRecord | null {
+        const row = this.db
+            .prepare(
+                'SELECT * FROM personal_versions WHERE application_id = ? AND user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1'
+            )
+            .get(applicationId, userId) as Row | undefined;
+        if (!row) return null;
+        const average = this.getActiveVersion(applicationId);
+        return average ? toPersonalVersion(row, average) : null;
+    }
 
     /** Commit an immutable version and activate it in the same transaction. */
     createVersion(input: {
@@ -529,12 +642,44 @@ export class FlowStore {
         });
     }
 
-    listEvents(applicationId: string, versionId: string): TelemetryEvent[] {
+    listEvents(
+        applicationId: string,
+        versionId: string,
+        userId?: string
+    ): TelemetryEvent[] {
         const rows = this.db
             .prepare(
-                'SELECT * FROM telemetry_events WHERE application_id = ? AND version_id = ? ORDER BY created_at, id'
+                userId
+                    ? 'SELECT * FROM telemetry_events WHERE application_id = ? AND version_id = ? AND user_id = ? ORDER BY created_at, id'
+                    : 'SELECT * FROM telemetry_events WHERE application_id = ? AND version_id = ? ORDER BY created_at, id'
             )
-            .all(applicationId, versionId) as Row[];
+            .all(
+                ...(userId
+                    ? [applicationId, versionId, userId]
+                    : [applicationId, versionId])
+            ) as Row[];
+        return rows.map((row) => ({
+            applicationId: row.application_id as string,
+            versionId: row.version_id as string,
+            sessionId: row.session_id as string,
+            userId: (row.user_id as string | null) ?? null,
+            componentId: row.component_id as string,
+            capabilityId: row.capability_id as string,
+            eventType: row.event_type as TelemetryEventType,
+            sinceLoadMs: Number(row.since_load_ms),
+            metadata: parse(row.metadata, {}),
+            seeded: Number(row.seeded) === 1,
+            createdAt: Number(row.created_at),
+        }));
+    }
+
+    /** All live evidence accumulated by one user across average and personal versions. */
+    listUserEvents(applicationId: string, userId: string): TelemetryEvent[] {
+        const rows = this.db
+            .prepare(
+                'SELECT * FROM telemetry_events WHERE application_id = ? AND user_id = ? ORDER BY created_at, id'
+            )
+            .all(applicationId, userId) as Row[];
         return rows.map((row) => ({
             applicationId: row.application_id as string,
             versionId: row.version_id as string,

@@ -15,6 +15,7 @@ export interface GenerationBrief {
     dependencies: Array<{ from: string; to: string }>;
     theme: FlowApp['theme'];
     grid: { columns: 12; sizes: typeof SIZE_SPAN };
+    userRequest?: string;
 }
 
 export interface OptimizationBrief extends GenerationBrief {
@@ -31,6 +32,11 @@ export interface OptimizationBrief extends GenerationBrief {
     topSequences: Metrics['transitions'];
     backendLatency: Array<Record<string, unknown>>;
     heuristicFindings: Finding[];
+}
+
+export interface PersonalizationBrief extends OptimizationBrief {
+    previousPersonalVersionId: string | null;
+    refreshInstruction: string;
 }
 
 export function generationBrief(app: FlowApp): GenerationBrief {
@@ -70,6 +76,10 @@ export function optimizationBrief(input: {
             capabilityId: m.capabilityId,
             usageRate: m.usageRate,
             interactions: m.interactions,
+            hovers: m.hovers,
+            scrolls: m.scrolls,
+            focusStarts: m.focusStarts,
+            disabledAttempts: m.disabledAttempts,
             avgDiscoveryMs: m.avgDiscoveryMs,
             avgFirstViewMs: m.avgFirstViewMs,
             repeatRate: m.repeatRate,
@@ -114,3 +124,16 @@ Rules:
 - Prefer 1-3 mutations. Every mutation must change something.
 - Base evidence on the numbers provided and mention the sample size honestly. Keep confidence modest when the sample is small.
 - Set fields that do not apply to a mutation type to null.`;
+
+export const PERSONALIZATION_INSTRUCTIONS = `You are flow.js, an adaptive interface runtime. Create a complete replacement UI schema for one user's personal dashboard. You receive the current personal (or average) schema and only that user's accumulated behavioral telemetry.
+
+Rules:
+- Return the entire dashboard, not mutations. This is a new immutable personal version.
+- Create at least one component for every registered capability. Bind each component to exactly one registered capability id.
+- Only use a primitive listed in that capability's compatiblePrimitives.
+- Keep component ids stable when they represent the same capability, so telemetry remains comparable across versions.
+- Sizes span a 12-column grid: small=3, medium=6, large=9, full=12. Order is reading order starting at 0.
+- Every required capability must have a visible component.
+- Use the user's component usage, discovery time, repeated actions, sequences, errors, and latency to plan the whole layout.
+- The returned layout must be materially different from currentSchema on every request. Change reading order, sizing, visibility, or compatible primitives even when evidence is sparse.
+- Backend latency alone must not hide or remove functionality. The result must remain coherent, functional, and safe.`;

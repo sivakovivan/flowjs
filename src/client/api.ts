@@ -5,6 +5,7 @@ import type {
 import type { Finding } from '@flowjs/core/flow/friction';
 import type { Metrics } from '@flowjs/core/flow/metrics';
 import type { Primitive } from '@flowjs/core/flow/primitives';
+import type { LayoutTracks } from '@flowjs/core/flow/layout-tracks';
 import type {
     CapabilityDescriptor,
     StateValues,
@@ -31,6 +32,8 @@ export interface StudioState {
     graph: Array<{ from: string; to: string }>;
     defaultState: StateValues;
     active: VersionRecord | null;
+    /** Scaffold for aggregate and per-user layout tracks. */
+    layouts?: LayoutTracks;
     versions: VersionSummary[];
     ai: {
         liveConfigured: boolean;
@@ -78,14 +81,31 @@ async function request<T>(
 }
 
 export const api = {
-    state: () => request<StudioState>('GET', '/state'),
-    generate: () =>
+    state: (userId?: string) =>
+        request<StudioState>(
+            'GET',
+            `/state${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`
+        ),
+    generate: (userRequest?: string) =>
         request<{ version: VersionRecord; provenance: AIProvenance | null }>(
             'POST',
-            '/generate'
+            '/generate',
+            userRequest ? { userRequest } : undefined
         ),
     metrics: () => request<MetricsResponse>('GET', '/metrics'),
     optimize: () => request<OptimizationRun>('POST', '/optimize'),
+    refreshOptimize: () =>
+        request<{
+            run: OptimizationRun | null;
+            version: VersionRecord | null;
+            applied: boolean;
+        }>('POST', '/refresh'),
+    refreshPersonal: (userId: string) =>
+        request<{
+            version: VersionRecord;
+            provenance: AIProvenance;
+            applied: true;
+        }>('POST', '/personal-refresh', { userId }),
     apply: (runId: string, mode: 'auto' | 'manual') =>
         request<{ version: VersionRecord; run: OptimizationRun }>(
             'POST',

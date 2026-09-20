@@ -19,7 +19,7 @@ async function setMutationRate(page: Page, rate: number) {
 }
 
 test('capabilities in, adaptive interface out', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/developer');
     await expect(
         page.getByRole('heading', { name: 'No dashboard layout was written.' })
     ).toBeVisible();
@@ -111,7 +111,7 @@ test('capabilities in, adaptive interface out', async ({ page }) => {
 });
 
 test('mutation rate 0 never applies automatically', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/developer');
     await expect(versionBadge(page)).toHaveText('v1');
     await setMutationRate(page, 0);
     await expect(
@@ -131,7 +131,7 @@ test('mutation rate 0 never applies automatically', async ({ page }) => {
 test('a high mutation rate applies automatically and branches from the active version', async ({
     page,
 }) => {
-    await page.goto('/');
+    await page.goto('/developer');
     await setMutationRate(page, 1);
     await page.getByRole('button', { name: 'Optimize now' }).click();
     await expect(page.getByText(/Applying automatically in \ds/)).toBeVisible();
@@ -145,7 +145,7 @@ test('a high mutation rate applies automatically and branches from the active ve
 test('retries on a slow backend are diagnosed as performance, not redesigned', async ({
     page,
 }) => {
-    await page.goto('/');
+    await page.goto('/developer');
     await expect(versionBadge(page)).toHaveText('v3');
     const exportPdf = page.getByRole('button', { name: 'Export PDF' });
     // Impatient user: clicks again while the slow PDF export is still running.
@@ -178,4 +178,33 @@ test('retries on a slow backend are diagnosed as performance, not redesigned', a
         page.getByRole('button', { name: 'Apply change' })
     ).toHaveCount(0);
     await expect(versionBadge(page)).toHaveText('v3');
+});
+
+test('every user refresh creates and displays a changed personal version', async ({
+    page,
+}) => {
+    await page.goto('/');
+    await expect(page.getByText(/^Personal layout · p/)).toBeVisible();
+    const firstLabel = await page.locator('.stage__meta p').innerText();
+    const firstOrder = await page
+        .locator('[data-component]')
+        .evaluateAll((nodes) =>
+            nodes.map((node) => node.getAttribute('data-component'))
+        );
+
+    await page.reload();
+    await expect(page.getByText(/^Personal layout · p/)).toBeVisible();
+    await expect(page.locator('.layout-change-notice')).toContainText(
+        'Your layout was refreshed'
+    );
+    await expect(page.locator('.change-tag')).not.toHaveCount(0);
+    const secondLabel = await page.locator('.stage__meta p').innerText();
+    const secondOrder = await page
+        .locator('[data-component]')
+        .evaluateAll((nodes) =>
+            nodes.map((node) => node.getAttribute('data-component'))
+        );
+
+    expect(secondLabel).not.toBe(firstLabel);
+    expect(secondOrder).not.toEqual(firstOrder);
 });

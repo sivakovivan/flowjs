@@ -11,7 +11,7 @@ import { computeMetrics, type Metrics } from './metrics';
 import { applyMutations, type Mutation } from './mutations';
 import { seedSessions } from './seed';
 import type { FlowApp } from './registry';
-import { validateSchema, type UISchema } from './schema';
+import { normalizeOrder, validateSchema, type UISchema } from './schema';
 import { decideAutoApply, scoreProposal, type MutationScore } from './scoring';
 import {
     FlowStore,
@@ -23,6 +23,7 @@ import {
     type VersionRecord,
 } from './store';
 import { z } from 'zod';
+import { defaultLayoutTracks } from './layout-tracks';
 
 /*
  * The adaptive loop: generate → observe → analyze → propose → validate →
@@ -67,6 +68,41 @@ export type IncomingEvent = z.input<typeof IncomingEvent>;
 /** Client clocks are trusted only within this skew. */
 const MAX_CLOCK_SKEW_MS = 10 * 60_000;
 
+function layoutSignature(schema: UISchema): string {
+    return JSON.stringify(
+        normalizeOrder(schema).components.map(
+            ({ id, primitive, size, order, visible }) => ({
+                id,
+                primitive,
+                size,
+                order,
+                visible,
+            })
+        )
+    );
+}
+
+/** Last-resort invariant: even a conservative/replayed model response becomes a new layout. */
+function ensureLayoutChanged(schema: UISchema, previous: UISchema): UISchema {
+    const normalized = normalizeOrder(schema);
+    if (layoutSignature(normalized) !== layoutSignature(previous))
+        return normalized;
+    const components = [...normalized.components];
+    if (components.length > 1) {
+        components.push(components.shift()!);
+        return {
+            components: components.map((component, order) => ({
+                ...component,
+                order,
+            })),
+        };
+    }
+    const only = components[0];
+    const sizes = ['small', 'medium', 'large', 'full'] as const;
+    const nextSize = sizes[(sizes.indexOf(only.size) + 1) % sizes.length];
+    return { components: [{ ...only, size: nextSize, order: 0 }] };
+}
+
 export class RuntimeError extends Error {
     constructor(
         message: string,
@@ -106,7 +142,11 @@ export function createRuntime(deps: {
         if (deps.forceRecorded)
             fallbackReason =
                 'Recorded mode is enabled (FLOW_AI_MODE=recorded).';
-        else if (!live) fallbackReason = 'OPENAI_API_KEY is not configured.';
+        else if (!live)
+            throw new RuntimeError(
+                'OPENAI_API_KEY is required for live AI operations. Set FLOW_AI_MODE=recorded only for explicit demo mode.',
+                503
+            );
         else {
             try {
                 const result = check(await call(live));
@@ -148,11 +188,14 @@ export function createRuntime(deps: {
         return version;
     }
 
-    function analyze(version: VersionRecord = activeVersion()) {
+    function analyze(
+        version: VersionRecord = activeVersion(),
+        userId?: string
+    ) {
         const metrics = computeMetrics({
             versionId: version.id,
             schema: version.schema,
-            events: store.listEvents(app.id, version.id),
+            events: store.listEvents(app.id, version.id, userId),
             calls: store.listCalls(app.id),
         });
         const findings = findFriction({ app, schema: version.schema, metrics });
@@ -169,6 +212,8 @@ export function createRuntime(deps: {
                 application,
                 active: store.getActiveVersion(app.id),
                 versions: store.listVersions(app.id),
+                // Scaffold: persistence/user identity will make personal non-null.
+                layouts: defaultLayoutTracks(store.getActiveVersion(app.id)),
             };
         },
 
@@ -222,11 +267,149 @@ export function createRuntime(deps: {
             return { version, provenance };
         },
 
+        async customize(
+            userRequest: string
+        ): Promise<{ version: VersionRecord; provenance: AIProvenance }> {
+            const request = userRequest.trim();
+            if (!request)
+                throw new RuntimeError('A customization request is required.');
+            if (request.length > 500)
+                throw new RuntimeError(
+                    'Customization requests must be 500 characters or fewer.'
+                );
+            const previous = activeVersion();
+            const { value, provenance } = await withFallback<{
+                schema: UISchema;
+                reasoning: string;
+            }>(
+                (provider) =>
+                    provider.generateSchema({
+                        ...generationBrief(app),
+                        userRequest: request,
+                    }),
+                (output) => {
+                    const parsed = GeneratedSchemaOutput.safeParse(output);
+                    if (!parsed.success)
+                        return {
+                            ok: false,
+                            errors: parsed.error.issues.map((i) => i.message),
+                        };
+                    const validated = validateSchema(
+                        toUISchema(parsed.data),
+                        app
+                    );
+                    return validated.ok
+                        ? {
+                              ok: true,
+                              value: {
+                                  schema: validated.schema,
+                                  reasoning: parsed.data.reasoning,
+                              },
+                          }
+                        : validated;
+                }
+            );
+            const version = store.createVersion({
+                applicationId: app.id,
+                parentVersionId: previous.id,
+                schema: value.schema,
+                mutations: [],
+                reason: `User request: ${request}`,
+                evidence: {
+                    reasoning: value.reasoning,
+                    request,
+                    ai: provenance,
+                },
+                source: 'generated',
+                aiSource: provenance.source,
+                cause: 'generate',
+            });
+            return { version, provenance };
+        },
+
+        /** Regenerate a complete personal schema from this user's evidence on every refresh. */
+        async regeneratePersonal(userId: string): Promise<{
+            version: VersionRecord;
+            provenance: AIProvenance;
+        }> {
+            if (!userId || userId.length > 64)
+                throw new RuntimeError('A valid user id is required.');
+            const average = activeVersion();
+            const previous =
+                store.getLatestPersonalVersion(app.id, userId) ?? average;
+            const metrics = computeMetrics({
+                versionId: previous.id,
+                schema: previous.schema,
+                events: store.listUserEvents(app.id, userId),
+                calls: store.listCalls(app.id),
+            });
+            const findings = findFriction({
+                app,
+                schema: previous.schema,
+                metrics,
+            });
+            const brief = {
+                ...optimizationBrief({
+                    app,
+                    schema: previous.schema,
+                    metrics,
+                    findings,
+                }),
+                previousPersonalVersionId:
+                    previous.id === average.id ? null : previous.id,
+                refreshInstruction:
+                    'Create a complete new personal layout for this refresh. A material layout change is mandatory even with sparse evidence.',
+            };
+            const { value, provenance } = await withFallback<{
+                schema: UISchema;
+                reasoning: string;
+            }>(
+                (provider) => provider.generatePersonalSchema(brief),
+                (output) => {
+                    const parsed = GeneratedSchemaOutput.safeParse(output);
+                    if (!parsed.success)
+                        return {
+                            ok: false,
+                            errors: parsed.error.issues.map((i) => i.message),
+                        };
+                    const validated = validateSchema(
+                        toUISchema(parsed.data),
+                        app
+                    );
+                    return validated.ok
+                        ? {
+                              ok: true,
+                              value: {
+                                  schema: ensureLayoutChanged(
+                                      validated.schema,
+                                      previous.schema
+                                  ),
+                                  reasoning: parsed.data.reasoning,
+                              },
+                          }
+                        : validated;
+                }
+            );
+            const version = store.createPersonalVersion({
+                applicationId: app.id,
+                userId,
+                parentVersionId: previous.id,
+                schema: value.schema,
+                reason: `Personal layout regenerated: ${value.reasoning}`,
+            });
+            return { version, provenance };
+        },
+
         analyze,
 
         /** Ask OpenAI for a finding and proposal, validate and score it. Never changes the UI. */
-        async optimize(): Promise<OptimizationRun> {
-            const { version, metrics, findings } = analyze();
+        async optimize(
+            options: { userId?: string } = {}
+        ): Promise<OptimizationRun> {
+            const { version, metrics, findings } = analyze(
+                activeVersion(),
+                options.userId
+            );
             if (metrics.totalInteractions === 0) {
                 throw new RuntimeError(
                     'No interactions recorded for this version yet. Use the dashboard first.',
@@ -447,7 +630,15 @@ export function createRuntime(deps: {
                 if (!parsed.success) continue;
                 const event = parsed.data;
                 if (!schemas.has(event.versionId)) {
-                    const version = store.getVersion(app.id, event.versionId);
+                    const version =
+                        store.getVersion(app.id, event.versionId) ??
+                        (event.userId
+                            ? store.getPersonalVersion(
+                                  app.id,
+                                  event.userId,
+                                  event.versionId
+                              )
+                            : null);
                     schemas.set(
                         event.versionId,
                         new Map(

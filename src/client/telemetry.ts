@@ -36,6 +36,15 @@ export function replayId(): string | null {
 class Tracker {
     /** One session per page load, so a reload is a new session. */
     readonly sessionId = newSessionId();
+    readonly userId = (() => {
+        const key = 'flowjs:user-id';
+        if (typeof window === 'undefined') return 'server-user';
+        const existing = localStorage.getItem(key);
+        if (existing) return existing;
+        const created = newSessionId();
+        localStorage.setItem(key, created);
+        return created;
+    })();
     private versionId: string | null = null;
     private shownAt = 0;
     private queue: QueuedEvent[] = [];
@@ -91,7 +100,9 @@ class Tracker {
     flush(beacon = false) {
         if (this.queue.length === 0) return;
         const events = this.queue.splice(0);
-        const body = JSON.stringify({ events });
+        const body = JSON.stringify({
+            events: events.map((event) => ({ ...event, userId: this.userId })),
+        });
         if (beacon && navigator.sendBeacon) {
             navigator.sendBeacon('/api/flow/telemetry', body);
             return;

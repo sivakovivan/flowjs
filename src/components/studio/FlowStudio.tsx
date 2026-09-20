@@ -180,9 +180,12 @@ export function FlowStudio({
         if (!studio?.active || typeof window === 'undefined') return;
         const key = `flowjs:refresh-optimization:${studio.active.id}:${tracker.sessionId}`;
         if (sessionStorage.getItem(key)) return;
+        const refreshKey = `flowjs:personal-refresh-count:${studio.active.id}`;
+        const refreshCount = Number(localStorage.getItem(refreshKey) ?? 0) + 1;
+        localStorage.setItem(refreshKey, String(refreshCount));
         Promise.allSettled([
             api.refreshOptimize(),
-            api.refreshPersonal(tracker.userId),
+            api.refreshPersonal(tracker.userId, refreshCount),
         ]).then(async ([averageResult, personalResult]) => {
             // Only suppress subsequent refreshes after the server completed
             // an optimization pass. A 409/no-data response must be retryable

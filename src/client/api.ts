@@ -96,12 +96,12 @@ export const api = {
             version: VersionRecord | null;
             applied: boolean;
         }>('POST', '/refresh'),
-    refreshPersonal: (userId: string) =>
+    refreshPersonal: (userId: string, refreshCount: number) =>
         request<{
-            run: OptimizationRun;
+            run: OptimizationRun | null;
             schema: VersionRecord['schema'] | null;
             applied: boolean;
-        }>('POST', '/personal-refresh', { userId }),
+        }>('POST', '/personal-refresh', { userId, refreshCount }),
     apply: (runId: string, mode: 'auto' | 'manual') =>
         request<{ version: VersionRecord; run: OptimizationRun }>(
             'POST',

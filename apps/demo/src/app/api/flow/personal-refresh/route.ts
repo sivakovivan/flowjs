@@ -2,12 +2,17 @@ import { z } from 'zod';
 import { applyMutations } from '@flowjs/core/flow/mutations';
 import { getRuntime, handle } from '@/server/flow';
 
-const RequestBody = z.object({ userId: z.string().min(1).max(64) });
+const RequestBody = z.object({
+    userId: z.string().min(1).max(64),
+    refreshCount: z.number().int().min(1).max(10_000),
+});
 
 /** Optimize one browser's layout without activating or mutating the average track. */
 export async function POST(request: Request) {
     return handle(async () => {
-        const { userId } = RequestBody.parse(await request.json());
+        const { userId, refreshCount } = RequestBody.parse(
+            await request.json()
+        );
         const runtime = getRuntime();
         let run;
         try {
@@ -15,7 +20,7 @@ export async function POST(request: Request) {
         } catch {
             return {
                 run: null,
-                schema: demoPersonalSchema(runtime, userId),
+                schema: demoPersonalSchema(runtime, userId, refreshCount),
                 applied: true,
             };
         }
@@ -27,7 +32,7 @@ export async function POST(request: Request) {
         )
             return {
                 run,
-                schema: demoPersonalSchema(runtime, userId),
+                schema: demoPersonalSchema(runtime, userId, refreshCount),
                 applied: true,
             };
         const result = applyMutations(
@@ -42,11 +47,14 @@ export async function POST(request: Request) {
 
 function demoPersonalSchema(
     runtime: ReturnType<typeof getRuntime>,
-    userId: string
+    userId: string,
+    refreshCount: number
 ) {
     const average = runtime.store.getActiveVersion(runtime.app.id)!.schema;
     const events = runtime.store.listEvents(runtime.app.id, average.id, userId);
-    const shift = events.length % Math.max(1, average.components.length);
+    const shift =
+        Math.max(events.length, refreshCount) %
+        Math.max(1, average.components.length);
     const components = [...average.components];
     if (shift) components.push(...components.splice(0, shift));
     return {

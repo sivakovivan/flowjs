@@ -559,7 +559,7 @@ export function FlowStudio({
                                 // Personal drafts are browser-local; telemetry is
                                 // attributed to their persisted average parent so
                                 // the server can validate and analyze the events.
-                                versionId={active.id}
+                                versionId={studio.active?.id ?? displayedVersion.id}
                                 capabilities={studio.capabilities}
                                 initialState={studio.defaultState}
                                 notify={notify}

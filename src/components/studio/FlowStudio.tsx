@@ -197,6 +197,7 @@ export function FlowStudio({
                 if (personal?.applied && personal.schema) {
                     const personalSchema = personal.schema;
                     setStudio((current) => {
+                        if (!current) return null;
                         const layouts = current?.layouts;
                         if (!layouts?.average || !layouts.personal) return current;
                         const nextPersonal = { ...layouts.personal, schema: personalSchema };

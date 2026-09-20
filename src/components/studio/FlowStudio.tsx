@@ -27,8 +27,11 @@ import { HistoryMenu } from './HistoryMenu';
 import { SourceBadge } from './SourceBadge';
 import { TelemetryPanel } from './TelemetryPanel';
 import { CustomizationChat } from './CustomizationChat';
-import type { LayoutTrack } from '@flowjs/core/flow/layout-tracks';
-import { defaultLayoutTracks } from '@flowjs/core/flow/layout-tracks';
+import {
+    createPersonalDraft,
+    defaultLayoutTracks,
+    type LayoutTrack,
+} from '@flowjs/core/flow/layout-tracks';
 
 type Tab = 'evidence' | 'telemetry' | 'capabilities';
 
@@ -103,7 +106,25 @@ export function FlowStudio({
         const next = await api.state();
         // Keep clients compatible with an older API process during rolling deploys.
         const layouts = next.layouts ?? defaultLayoutTracks(next.active);
-        const normalized = { ...next, layouts };
+        const personalKey = `flowjs:personal-layout:${next.application.id}`;
+        const storedPersonal =
+            typeof window === 'undefined'
+                ? null
+                : JSON.parse(localStorage.getItem(personalKey) ?? 'null');
+        const normalized = {
+            ...next,
+            layouts: {
+                ...layouts,
+                personal: layouts.average
+                    ? createPersonalDraft(layouts.average, storedPersonal)
+                    : null,
+            },
+        };
+        if (normalized.layouts.personal)
+            localStorage.setItem(
+                personalKey,
+                JSON.stringify(normalized.layouts.personal)
+            );
         setStudio(normalized);
         setLayoutTrack(layouts.selected);
         setRate(normalized.application.mutationRate);

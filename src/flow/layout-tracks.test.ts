@@ -9,7 +9,7 @@ import type { VersionRecord } from './store';
 const average = {
     id: 'v1',
     schema: { components: [] },
-} as VersionRecord;
+} as unknown as VersionRecord;
 
 describe('layout tracks', () => {
     it('defaults a new user to the aggregate average layout', () => {
